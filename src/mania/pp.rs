@@ -213,17 +213,18 @@ impl<'map> ManiaPP<'map> {
     }
 
     /// Calculate all performance related values, including pp and stars.
+    /// ppやstarrateを含む、パフォーマンスに関連するすべての値を計算する。
     pub fn calculate(self) -> ManiaPerformanceAttributes {
         let attrs = self.attributes.unwrap_or_else(|| {
-            let mut calculator = ManiaStars::new(self.map.as_ref())
+            let mut calculator = ManiaStars::new(self.map.as_ref()) //新しい型を作る
                 .mods(self.mods)
                 .is_convert(matches!(self.map, Cow::Owned(_)));
 
-            if let Some(passed_objects) = self.passed_objects {
+            if let Some(passed_objects) = self.passed_objects {  //Some = 存在しない可能性があるとき (この場合しっかりパスしているかもしれない))
                 calculator = calculator.passed_objects(passed_objects);
             }
 
-            if let Some(clock_rate) = self.clock_rate {
+            if let Some(clock_rate) = self.clock_rate { //DTやHTなどを使用した場合
                 calculator = calculator.clock_rate(clock_rate);
             }
 
@@ -239,10 +240,13 @@ impl<'map> ManiaPP<'map> {
         inner.calculate()
     }
 
+    //ヒット結果の生成
+    //プレイヤーのスコアやヒット結果を主に計算する (もしデータが不足していた場合)
     fn generate_hitresults(&self) -> ManiaScoreState {
-        let n_objects = self.passed_objects.unwrap_or(self.map.hit_objects.len());
-        let priority = self.hitresult_priority.unwrap_or_default();
+        let n_objects = self.passed_objects.unwrap_or(self.map.hit_objects.len()); //クリアしていない場合はそのオブジェクト、している場合は全ての範囲の値を入れる
+        let priority = self.hitresult_priority.unwrap_or_default(); //優先順位？
 
+        //可変な変数を作成 (初期値0)
         let mut n320 = self.n320.unwrap_or(0);
         let mut n300 = self.n300.unwrap_or(0);
         let mut n200 = self.n200.unwrap_or(0);
@@ -250,35 +254,47 @@ impl<'map> ManiaPP<'map> {
         let mut n50 = self.n50.unwrap_or(0);
         let n_misses = self.n_misses.unwrap_or(0);
 
-        if let Some(acc) = self.acc {
-            let target_total = (acc * (n_objects * 6) as f64).round() as usize;
+        //もしaccが指定されている場合
+        if let Some(acc) = self.acc { 
+            //目標の合計ヒット数 (全パターン)
+            let target_total = (acc * (n_objects * 6) as f64).round() as usize; //全てのヒット結果の合計数 (n_objects * 6) * 精度
 
+            //switch (self.n320, self.n300, self.n200, self.n100, self.n50)
             match (self.n320, self.n300, self.n200, self.n100, self.n50) {
-                (Some(_), Some(_), Some(_), Some(_), Some(_)) => {
+                (Some(_), Some(_), Some(_), Some(_), Some(_)) => { //全てのパターンがある場合 (n320からnmissまで)
                     let remaining =
-                        n_objects.saturating_sub(n320 + n300 + n200 + n100 + n50 + n_misses);
+                        n_objects.saturating_sub(n320 + n300 + n200 + n100 + n50 + n_misses); //クリアしたオブジェクトから存在するヒット数をひく (余るとおかしい->どれが無いのか確かめる)
 
-                    match priority {
+                    //switch (priority)
+
+                    //enumの種類
+
+                    /*akatsuki_pp::pp
+                    pub enum HitResultPriority {
+                        BestCase,
+                        WorstCase,
+                    } // size = 1, align = 0x1 */
+                    match priority { //最悪な場合ともしよかった場合を考慮して計算する
                         HitResultPriority::BestCase => n320 += remaining,
                         HitResultPriority::WorstCase => n50 += remaining,
                     }
                 }
-                (Some(_), None, Some(_), Some(_), Some(_)) => {
+                (Some(_), None, Some(_), Some(_), Some(_)) => { //n300の値が欠けてた場合
                     n300 = n_objects.saturating_sub(n320 + n200 + n100 + n50 + n_misses)
                 }
-                (None, Some(_), Some(_), Some(_), Some(_)) => {
+                (None, Some(_), Some(_), Some(_), Some(_)) => { //n320の値がかけてる場合
                     n320 = n_objects.saturating_sub(n300 + n200 + n100 + n50 + n_misses)
                 }
-                (Some(_), _, Some(_), Some(_), None) | (_, Some(_), Some(_), Some(_), None) => {
+                (Some(_), _, Some(_), Some(_), None) | (_, Some(_), Some(_), Some(_), None) => { //n50の値が欠けてる場合
                     n50 = n_objects.saturating_sub(n320 + n300 + n200 + n100 + n_misses);
                 }
-                (Some(_), _, _, None, None) | (_, Some(_), _, None, None) => {
+                (Some(_), _, _, None, None) | (_, Some(_), _, None, None) => { //n100とn50がない場合
                     let n3x0 = n320 + n300;
-                    let delta = (target_total - n_objects.saturating_sub(n_misses))
+                    let delta = (target_total - n_objects.saturating_sub(n_misses)) // (全パターン - (クリアしたオブジェクト - ミス数)) - ((320の数 + 300の数) * 5 + 200の数 * 3)
                         .saturating_sub(n3x0 * 5 + n200 * 3);
 
-                    n100 = delta % 5;
-                    n50 = n_objects.saturating_sub(n3x0 + n200 + n100 + n_misses);
+                    n100 = delta % 5; //n100
+                    n50 = n_objects.saturating_sub(n3x0 + n200 + n100 + n_misses); //n50
 
                     let curr_total = 6 * n3x0 + 4 * n200 + 2 * n100 + n50;
 
@@ -497,17 +513,20 @@ impl<'map> ManiaPP<'map> {
     }
 }
 
+//
+
 struct ManiaPpInner {
     attrs: ManiaDifficultyAttributes,
     mods: u32,
     state: ManiaScoreState,
 }
 
+// Maniaモードにおけるスコア計算やPerformance Points (PP) 計算に関連するRustのコード
 impl ManiaPpInner {
     fn calculate(self) -> ManiaPerformanceAttributes {
         // * Arbitrary initial value for scaling pp in order to standardize distributions across game modes.
         // * The specific number has no intrinsic meaning and can be adjusted as needed.
-        let mut multiplier = 8.0;
+        let mut multiplier = 8.0; //乗数を8倍で初期化する
 
         if self.mods.nf() {
             multiplier *= 0.75;
@@ -529,8 +548,10 @@ impl ManiaPpInner {
 
     fn compute_difficulty_value(&self) -> f64 {
         // * Star rating to pp curve
+        // star ratingからppへ
         (self.attrs.stars - 0.15).max(0.05).powf(2.2)
              // * From 80% accuracy, 1/20th of total pp is awarded per additional 1% accuracy
+             // 80％の精度から、さらに1％の精度が増すごとに、総PPの20分の1が与えられる。
              * (5.0 * self.calculate_custom_accuracy() - 4.0).max(0.0)
              // * Length bonus, capped at 1500 notes
              * (1.0 + 0.1 * (self.total_hits() / 1500.0).min(1.0))
