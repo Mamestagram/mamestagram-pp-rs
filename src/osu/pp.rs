@@ -669,12 +669,10 @@ impl OsuPpInner {
     }
 
     fn get_combo_scaling_factor(&self) -> f64 {
-        if self.attrs.max_combo == 0 {
-            1.0
-        } else {
-            ((self.state.max_combo as f64).powf(0.8) / (self.attrs.max_combo as f64).powf(0.8))
-                .min(1.0)
-        }
+        // as far as i'm concerned, this is the only reason pp shrinks so much when no full combo.
+        // made this return 1.0 for now, so no change, otherwise lines 481, 547, 656 (ones using this function to multiply pp)
+        // can be safely removed, since they would have no effect if this change would work proprely
+        1.0
     }
 
     fn total_hits(&self) -> f64 {
