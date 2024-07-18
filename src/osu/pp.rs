@@ -478,8 +478,6 @@ impl OsuPpInner {
                     .powf(self.effective_miss_count);
         }
 
-        aim_value *= self.get_combo_scaling_factor();
-
         let ar_factor = if self.mods.rx() {
             0.0
         } else if self.attrs.ar > 10.33 {
@@ -514,6 +512,7 @@ impl OsuPpInner {
         }
 
         aim_value *= self.acc;
+
         // * It is important to consider accuracy difficulty when scaling with accuracy.
         aim_value *= 0.98 + self.attrs.od * self.attrs.od / 2500.0;
 
@@ -543,8 +542,6 @@ impl OsuPpInner {
                 * (1.0 - (self.effective_miss_count / total_hits).powf(0.775))
                     .powf(self.effective_miss_count.powf(0.875));
         }
-
-        speed_value *= self.get_combo_scaling_factor();
 
         let ar_factor = if self.mods.ap() {
             0.0
@@ -653,6 +650,7 @@ impl OsuPpInner {
                     .powf(self.effective_miss_count.powf(0.875));
         }
 
+        //scaldings: keeping combo scaling factor for FL in case it makes FL unreasonably over-powered
         flashlight_value *= self.get_combo_scaling_factor();
 
         // * Account for shorter maps having a higher ratio of 0 combo/100 combo flashlight radius.
@@ -669,10 +667,13 @@ impl OsuPpInner {
     }
 
     fn get_combo_scaling_factor(&self) -> f64 {
-        // as far as i'm concerned, this is the only reason pp shrinks so much when no full combo.
-        // made this return 1.0 for now, so no change, otherwise lines 481, 547, 656 (ones using this function to multiply pp)
-        // can be safely removed, since they would have no effect if this change would work proprely
-        1.0
+        //scaldings: this doesn't need to change, removed previous multiplications of aim and speed pp by this factor
+        if self.attrs.max_combo == 0 {
+            1.0
+        } else {
+            ((self.state.max_combo as f64).powf(0.8) / (self.attrs.max_combo as f64).powf(0.8))
+                .min(1.0)
+        }
     }
 
     fn total_hits(&self) -> f64 {
