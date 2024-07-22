@@ -478,6 +478,10 @@ impl OsuPpInner {
                     .powf(self.effective_miss_count);
         }
 
+        if self.mods.sv2() {
+            aim_value *= self.get_combo_scaling_factor();
+        }
+
         let ar_factor = if self.mods.rx() {
             0.0
         } else if self.attrs.ar > 10.33 {
@@ -541,6 +545,10 @@ impl OsuPpInner {
             speed_value *= 0.97
                 * (1.0 - (self.effective_miss_count / total_hits).powf(0.775))
                     .powf(self.effective_miss_count.powf(0.875));
+        }
+
+        if self.mods.sv2() {
+            speed_value *= self.get_combo_scaling_factor();
         }
 
         let ar_factor = if self.mods.ap() {
