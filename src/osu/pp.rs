@@ -443,7 +443,7 @@ impl OsuPpInner {
             + flashlight_value.powf(1.1))
         .powf(1.0 / 1.1)
             * multiplier;
-
+            
         OsuPerformanceAttributes {
             difficulty: self.attrs,
             pp_acc: acc_value,
@@ -480,6 +480,9 @@ impl OsuPpInner {
 
         if self.mods.sv2() {
             aim_value *= self.get_combo_scaling_factor();
+        }
+        else {
+            aim_value *= self.get_acc_scaling_factor();
         }
 
         let ar_factor = if self.mods.rx() {
@@ -548,7 +551,10 @@ impl OsuPpInner {
         }
 
         if self.mods.sv2() {
-            speed_value *= self.get_combo_scaling_factor();
+            speed_value *= self.get_combo_scaling_factor();  
+        }
+        else {
+            speed_value *= self.get_acc_scaling_factor();
         }
 
         let ar_factor = if self.mods.ap() {
@@ -676,12 +682,18 @@ impl OsuPpInner {
 
     fn get_combo_scaling_factor(&self) -> f64 {
         //scaldings: this doesn't need to change, removed previous multiplications of aim and speed pp by this factor
+        //note - multiplications only in scoreV2
         if self.attrs.max_combo == 0 {
             1.0
         } else {
             ((self.state.max_combo as f64).powf(0.8) / (self.attrs.max_combo as f64).powf(0.8))
                 .min(1.0)
         }
+    }
+
+    fn get_acc_scaling_factor(&self) -> f64 {
+        //scaldings: the lower your max combo is, the more you get punished for lower accuracy
+        self.acc.powf((1.0 - self.get_combo_scaling_factor()) * 3.0)
     }
 
     fn total_hits(&self) -> f64 {

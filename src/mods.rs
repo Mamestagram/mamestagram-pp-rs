@@ -15,6 +15,7 @@ pub trait Mods: Copy {
     const TD: u32 = 1 << 2;
     const HD: u32 = 1 << 3;
     const HR: u32 = 1 << 4;
+    const SD: u32 = 1 << 5;
     const DT: u32 = 1 << 6;
     const RX: u32 = 1 << 7;
     const HT: u32 = 1 << 8;
@@ -36,6 +37,7 @@ pub trait Mods: Copy {
     fn td(self) -> bool;
     fn hd(self) -> bool;
     fn hr(self) -> bool;
+    fn sd(self) -> bool;
     fn dt(self) -> bool;
     fn rx(self) -> bool;
     fn ht(self) -> bool;
@@ -83,6 +85,7 @@ impl Mods for u32 {
     impl_mods!(td, TD);
     impl_mods!(hd, HD);
     impl_mods!(hr, HR);
+    impl_mods!(sd, SD);
     impl_mods!(dt, DT);
     impl_mods!(rx, RX);
     impl_mods!(ht, HT);
