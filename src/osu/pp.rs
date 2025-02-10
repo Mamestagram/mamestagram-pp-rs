@@ -470,6 +470,12 @@ impl OsuPpInner {
 
         aim_value *= len_bonus;
 
+        // high CS bonus
+        if self.attrs.cs >= 5.0 {
+            let cs_bonus = 1.0 + ((self.attrs.cs - 5.0).max(0.1) * 0.1) * len_bonus;
+            aim_value *= cs_bonus;
+        }
+        
         // * Penalize misses by assessing # of misses relative to the total # of objects.
         // * Default a 3% reduction for any # of misses.
         if self.effective_miss_count > 0.0 {
@@ -782,6 +788,7 @@ mod test {
             speed_note_count: 210.36373973116545,
             ar: 9.300000190734863,
             od: 8.800000190734863,
+            cs: 4.0,
             hp: 5.0,
             n_circles: 307,
             n_sliders: 293,
