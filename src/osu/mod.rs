@@ -271,6 +271,7 @@ fn calculate_skills(params: OsuStars<'_>) -> (Skills, OsuDifficultyAttributes) {
         ar: map_attrs.ar,
         hp: map_attrs.hp,
         od: map_attrs.od,
+        cs: map_attrs.cs,
         ..Default::default()
     };
 
@@ -519,6 +520,8 @@ pub struct OsuDifficultyAttributes {
     pub ar: f64,
     /// The overall difficulty
     pub od: f64,
+    /// The circle size
+    pub cs: f64,
     /// The health drain rate.
     pub hp: f64,
     /// The amount of circles.
