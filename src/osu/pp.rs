@@ -350,6 +350,8 @@ impl<'map> OsuPP<'map> {
 
     /// Calculate all performance related values, including pp and stars.
     pub fn calculate(mut self) -> OsuPerformanceAttributes {
+        println!("Calculating using latest osu calc");
+
         let attrs = self.attributes.take().unwrap_or_else(|| {
             let mut calculator = OsuStars::new(self.map).mods(self.mods);
 
@@ -463,7 +465,7 @@ impl OsuPpInner {
         let mut aim_value = (5.0 * (self.attrs.aim / 0.0675).max(1.0) - 4.0).powi(3) / 100_000.0;
 
         let total_hits = self.total_hits();
-
+        
         let len_bonus = 0.95
             + 0.4 * (total_hits / 2000.0).min(1.0)
             + (total_hits > 2000.0) as u8 as f64 * (total_hits / 2000.0).log10() * 0.5;
@@ -475,7 +477,7 @@ impl OsuPpInner {
             let cs_bonus = 1.0 + ((self.attrs.cs - 5.0).max(0.1) * 0.1) * len_bonus;
             aim_value *= cs_bonus;
         }
-        
+
         // * Penalize misses by assessing # of misses relative to the total # of objects.
         // * Default a 3% reduction for any # of misses.
         if self.effective_miss_count > 0.0 {
@@ -483,7 +485,7 @@ impl OsuPpInner {
                 * (1.0 - (self.effective_miss_count / total_hits).powf(0.775))
                     .powf(self.effective_miss_count);
         }
-
+ 
         if self.mods.sv2() {
             aim_value *= self.get_combo_scaling_factor();
         }
