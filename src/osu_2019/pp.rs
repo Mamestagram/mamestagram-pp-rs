@@ -233,6 +233,8 @@ impl<'m> OsuPP<'m> {
     /// Returns an object which contains the pp and [`DifficultyAttributes`](crate::osu::DifficultyAttributes)
     /// containing stars and other attributes.
     pub fn calculate(mut self) -> OsuPerformanceAttributes {
+        println!("Calculating using osu2019");
+
         if self.attributes.is_none() {
             let attributes = stars(self.map, self.mods, self.passed_objects);
             self.attributes.replace(attributes);
