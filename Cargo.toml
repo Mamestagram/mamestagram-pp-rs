@@ -1,36 +1,30 @@
 [package]
-name = "akatsuki-pp"
-version = "0.9.6"
-authors = ["MaxOhn <ohn.m@hotmail.de>", "tsunyoku <tsunyoku@gmail.com>"]
-edition = "2018"
+name = "mames-pp"
+version = "2.0.0"
+edition = "2021"
+authors = ["MaxOhn <ohn.m@hotmail.de>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/osuAkatsuki/akatsuki-pp"
-description = "osu! difficulty and pp calculation for all modes"
-keywords = ["osu", "pp", "stars", "async"]
+repository = "https://github.com/MaxOhn/rosu-pp"
+documentation = "https://docs.rs/rosu-pp/"
+description = "Difficulty and performance calculation for osu!"
+keywords = ["osu", "pp", "stars", "performance", "difficulty"]
 
 [features]
 default = []
-async_std = ["async-std"]
-async_tokio = ["tokio"]
+raw_strains = []
+sync = []
+tracing = ["rosu-map/tracing"]
 
-[dependencies.async-std]
-version = "1.9"
-optional = true
-default-features = false
-features = ["async-io", "std"]
+[dependencies]
+rosu-map = { version = "0.2.0" }
+rosu-mods = { version = "0.2.0" }
 
-[dependencies.tokio]
-version = "1.2"
-optional = true
-default-features = false
-features = ["fs", "io-util"]
+[dev-dependencies]
+proptest = "1.4.0"
 
-[dev-dependencies.tokio]
-version = "1.2"
-default-features = false
-features = ["fs", "rt"]
+[profile.test.package.proptest]
+opt-level = 3
 
-[dev-dependencies.async-std]
-version = "1.9"
-default-features = true
+[profile.test.package.rand_chacha]
+opt-level = 3
