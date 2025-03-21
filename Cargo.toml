@@ -2,10 +2,10 @@
 name = "mames-pp"
 version = "2.0.0"
 edition = "2021"
-authors = ["MaxOhn <ohn.m@hotmail.de>"]
+authors = ["MaxOhn <ohn.m@hotmail.de>", "scaldings"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/MaxOhn/rosu-pp"
+repository = "https://github.com/Mamestagram/mamestagram-pp-rs"
 documentation = "https://docs.rs/rosu-pp/"
 description = "Difficulty and performance calculation for osu!"
 keywords = ["osu", "pp", "stars", "performance", "difficulty"]
