@@ -86,9 +86,29 @@ impl OsuPerformanceAttributes {
         self.difficulty.stars
     }
 
-    /// Return the performance point value.
+    /// Return the overall performance point value.
     pub const fn pp(&self) -> f64 {
         self.pp
+    }
+
+    /// Return the aim performance point value.
+    pub const fn pp_aim(&self) -> f64 {
+        self.pp_aim
+    }
+
+    /// Return the speed performance point value.
+    pub const fn pp_speed(&self) -> f64 {
+        self.pp_speed
+    }
+
+    /// Return the acc performance point value.
+    pub const fn pp_acc(&self) -> f64 {
+        self.pp_acc
+    }
+
+    /// Return the flashlight performance point value.
+    pub const fn pp_flashlight(&self) -> f64 {
+        self.pp_flashlight
     }
 
     /// Return the maximum combo of the map.

@@ -3,13 +3,7 @@ use std::{borrow::Cow, cmp};
 use rosu_map::section::general::GameMode;
 
 use crate::{
-    any::{Difficulty, HitResultPriority, IntoModePerformance, IntoPerformance, Performance},
-    catch::CatchPerformance,
-    mania::ManiaPerformance,
-    model::{mode::ConvertError, mods::GameMods},
-    taiko::TaikoPerformance,
-    util::{float_ext::FloatExt, map_or_attrs::MapOrAttrs},
-    Beatmap,
+    any::{Difficulty, HitResultPriority, IntoModePerformance, IntoPerformance, Performance}, catch::CatchPerformance, mania::ManiaPerformance, model::{mode::ConvertError, mods::GameMods}, taiko::TaikoPerformance, util::{float_ext::FloatExt, map_or_attrs::MapOrAttrs}, Beatmap
 };
 
 use super::{
@@ -788,6 +782,7 @@ impl<'map, T: IntoModePerformance<'map, Osu>> From<T> for OsuPerformance<'map> {
 
 // * This is being adjusted to keep the final pp value scaled around what it used to be when changing things.
 pub const PERFORMANCE_BASE_MULTIPLIER: f64 = 1.15;
+pub const PERFORMANCE_BASE_MULTIPLIER_RELAX: f64 = 1.1;
 
 struct OsuPerformanceInner<'mods> {
     attrs: OsuDifficultyAttributes,
@@ -799,7 +794,7 @@ struct OsuPerformanceInner<'mods> {
 }
 
 impl OsuPerformanceInner<'_> {
-    fn calculate(mut self) -> OsuPerformanceAttributes {
+    fn calculate(self) -> OsuPerformanceAttributes {
         let total_hits = self.state.total_hits();
 
         if total_hits == 0 {
@@ -811,6 +806,11 @@ impl OsuPerformanceInner<'_> {
 
         let total_hits = f64::from(total_hits);
 
+        if self.mods.rx() {
+
+                return self.calculate_relax()
+        }
+
         let mut multiplier = PERFORMANCE_BASE_MULTIPLIER;
 
         if self.mods.nf() {
@@ -821,36 +821,15 @@ impl OsuPerformanceInner<'_> {
             multiplier *= 1.0 - (f64::from(self.attrs.n_spinners) / total_hits).powf(0.85);
         }
 
-        if self.mods.rx() {
-            // * https://www.desmos.com/calculator/bc9eybdthb
-            // * we use OD13.3 as maximum since it's the value at which great hitwidow becomes 0
-            // * this is well beyond currently maximum achievable OD which is 12.17 (DTx2 + DA with OD11)
-            let (n100_mult, n50_mult) = if self.attrs.od > 0.0 {
-                (
-                    (1.0 - (self.attrs.od / 13.33).powf(1.8)).max(0.0),
-                    (1.0 - (self.attrs.od / 13.33).powf(5.0)).max(0.0),
-                )
-            } else {
-                (1.0, 1.0)
-            };
+        let aim_value = self.compute_aim_value().powf(1.1);
+        let speed_value = self.compute_speed_value().powf(1.1);
+        let acc_value = self.compute_accuracy_value().powf(1.1);
+        let flashlight_value = self.compute_flashlight_value().powf(1.1);
 
-            // * As we're adding Oks and Mehs to an approximated number of combo breaks the result can be
-            // * higher than total hits in specific scenarios (which breaks some calculations) so we need to clamp it.
-            self.effective_miss_count = (self.effective_miss_count
-                + f64::from(self.state.n100) * n100_mult
-                + f64::from(self.state.n50) * n50_mult)
-                .min(total_hits);
-        }
-
-        let aim_value = self.compute_aim_value();
-        let speed_value = self.compute_speed_value();
-        let acc_value = self.compute_accuracy_value();
-        let flashlight_value = self.compute_flashlight_value();
-
-        let pp = (aim_value.powf(1.1)
-            + speed_value.powf(1.1)
-            + acc_value.powf(1.1)
-            + flashlight_value.powf(1.1))
+        let pp = (aim_value
+            + speed_value
+            + acc_value
+            + flashlight_value)
         .powf(1.0 / 1.1)
             * multiplier;
 
@@ -859,6 +838,50 @@ impl OsuPerformanceInner<'_> {
             pp_acc: acc_value,
             pp_aim: aim_value,
             pp_flashlight: flashlight_value,
+            pp_speed: speed_value,
+            pp,
+            effective_miss_count: self.effective_miss_count,
+        }
+    }
+
+    fn calculate_relax(self) -> OsuPerformanceAttributes {
+        let total_hits = f64::from(self.state.total_hits());
+
+        let mut multiplier = PERFORMANCE_BASE_MULTIPLIER_RELAX;
+
+        // SO penalty
+        if self.mods.so() {
+            multiplier *=
+                1.0 - (self.attrs.n_spinners as f64 / total_hits).powf(0.85);
+        }
+
+        let mut aim_value = self.compute_aim_value();
+        let mut speed_value = self.compute_speed_value();
+        let mut acc_value = self.compute_accuracy_value();
+
+        let mut acc_depression = 1.0;
+        let streams_nerf = ((self.attrs.aim_difficult_strain_count / self.attrs.speed_difficult_strain_count) * 100.0).round() / 100.0;
+
+        if streams_nerf < 1.0 {
+            let acc_factor = (1.0 - self.acc).abs();
+            acc_depression = (0.86 - acc_factor).max(0.5);
+
+            if acc_depression > 0.0 {
+                aim_value *= acc_depression;
+            }
+        }
+
+        aim_value = aim_value.powf(1.185);
+        speed_value = speed_value.powf(0.75 * acc_depression);
+        acc_value = acc_value.powf(1.1);
+
+        let pp = (aim_value + speed_value + acc_value).powf(1.0 / 1.1) * multiplier;
+
+        OsuPerformanceAttributes {
+            difficulty: self.attrs,
+            pp_acc: acc_value,
+            pp_aim: aim_value,
+            pp_flashlight: 0 as f64,
             pp_speed: speed_value,
             pp,
             effective_miss_count: self.effective_miss_count,
@@ -883,9 +906,7 @@ impl OsuPerformanceInner<'_> {
             );
         }
 
-        let ar_factor = if self.mods.rx() {
-            0.0
-        } else if self.attrs.ar > 10.33 {
+        let ar_factor = if self.attrs.ar > 10.33 {
             0.3 * (self.attrs.ar - 10.33)
         } else if self.attrs.ar < 8.0 {
             0.05 * (8.0 - self.attrs.ar)
@@ -943,10 +964,6 @@ impl OsuPerformanceInner<'_> {
     }
 
     fn compute_speed_value(&self) -> f64 {
-        if self.mods.rx() {
-            return 0.0;
-        }
-
         let mut speed_value = OsuStrainSkill::difficulty_to_performance(self.attrs.speed);
 
         let total_hits = self.total_hits();
@@ -1014,10 +1031,6 @@ impl OsuPerformanceInner<'_> {
     }
 
     fn compute_accuracy_value(&self) -> f64 {
-        if self.mods.rx() {
-            return 0.0;
-        }
-
         // * This percentage only considers HitCircles of any value - in this part
         // * of the calculation we focus on hitting the timing hit window.
         let mut amount_hit_objects_with_acc = self.attrs.n_circles;

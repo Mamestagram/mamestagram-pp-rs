@@ -71,6 +71,42 @@ impl PerformanceAttributes {
         }
     }
 
+    pub const fn pp_aim(&self) -> f64 {
+        match self {
+            Self::Osu(attrs) => attrs.pp_aim,
+            Self::Taiko(attrs) => attrs.pp,
+            Self::Catch(attrs) => attrs.pp,
+            Self::Mania(attrs) => attrs.pp,
+        }
+    }
+
+    pub const fn pp_speed(&self) -> f64 {
+        match self {
+            Self::Osu(attrs) => attrs.pp_speed,
+            Self::Taiko(attrs) => attrs.pp,
+            Self::Catch(attrs) => attrs.pp,
+            Self::Mania(attrs) => attrs.pp,
+        }
+    }
+
+    pub const fn pp_acc(&self) -> f64 {
+        match self {
+            Self::Osu(attrs) => attrs.pp_acc,
+            Self::Taiko(attrs) => attrs.pp,
+            Self::Catch(attrs) => attrs.pp,
+            Self::Mania(attrs) => attrs.pp,
+        }
+    }
+
+    pub const fn pp_flashlight(&self) -> f64 {
+        match self {
+            Self::Osu(attrs) => attrs.pp_flashlight,
+            Self::Taiko(attrs) => attrs.pp,
+            Self::Catch(attrs) => attrs.pp,
+            Self::Mania(attrs) => attrs.pp,
+        }
+    }
+
     /// The star value.
     pub const fn stars(&self) -> f64 {
         match self {
