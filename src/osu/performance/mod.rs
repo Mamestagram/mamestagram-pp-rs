@@ -882,12 +882,12 @@ impl OsuPerformanceInner<'_> {
 
         let aim_speed_ratio = aim_value / speed_value;
 
-        if aim_speed_ratio < 0.9 {
+        if aim_speed_ratio < 1.0 {
+            speed_value = speed_value.powf(self.acc * aim_speed_ratio);
             aim_value *= aim_speed_ratio;
         }
 
         aim_value = aim_value.powf(1.1);
-        speed_value = speed_value.powf(self.acc * aim_speed_ratio);
         acc_value = acc_value.powf(1.1);
 
         let pp = (aim_value + speed_value + acc_value).powf(1.0 / 1.1) * multiplier;
