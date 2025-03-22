@@ -880,20 +880,14 @@ impl OsuPerformanceInner<'_> {
         let mut speed_value = self.compute_speed_value();
         let mut acc_value = self.compute_accuracy_value();
 
-        let mut acc_depression = 1.0;
-        let streams_nerf = ((self.attrs.aim_difficult_strain_count / self.attrs.speed_difficult_strain_count) * 100.0).round() / 100.0;
+        let aim_speed_ratio = aim_value / speed_value;
 
-        if streams_nerf < 1.09 {
-            let acc_factor = (1.0 - self.acc).abs();
-            acc_depression = (0.86 - acc_factor).max(0.5);
-
-            if acc_depression > 0.0 {
-                aim_value *= acc_depression;
-            }
+        if aim_speed_ratio < 0.9 {
+            aim_value *= aim_speed_ratio;
         }
 
         aim_value = aim_value.powf(1.1);
-        speed_value = speed_value.powf(1.1);
+        speed_value = speed_value.powf(self.acc * aim_speed_ratio);
         acc_value = acc_value.powf(1.1);
 
         let pp = (aim_value + speed_value + acc_value).powf(1.0 / 1.1) * multiplier;
@@ -998,10 +992,15 @@ impl OsuPerformanceInner<'_> {
         speed_value *= len_bonus;
 
         if self.effective_miss_count > 0.0 {
-            speed_value *= Self::calculate_miss_penalty(
-                self.effective_miss_count,
-                self.attrs.speed_difficult_strain_count
-            );
+            if self.mods.rx() {
+                speed_value *= Self::calculate_relax_miss_penalty(self.total_hits(), self.effective_miss_count);
+            }
+            else {
+                speed_value *= Self::calculate_miss_penalty(
+                    self.effective_miss_count,
+                    self.attrs.speed_difficult_strain_count
+                );
+            }      
         }
 
         let ar_factor = if self.attrs.ar > 10.33 {
