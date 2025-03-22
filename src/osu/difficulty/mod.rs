@@ -167,7 +167,7 @@ impl DifficultyValues {
         let mut aim_rating = aim.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
         let aim_rating_no_sliders =
             aim_no_sliders.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
-        let mut speed_rating = speed.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
+        let speed_rating = speed.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
         let mut flashlight_rating = flashlight_difficulty_value.sqrt() * DIFFICULTY_MULTIPLIER;
 
         let slider_factor = if aim_rating > 0.0 {
@@ -182,12 +182,6 @@ impl DifficultyValues {
         if mods.td() {
             aim_rating = aim_rating.powf(0.8);
             flashlight_rating = flashlight_rating.powf(0.8);
-        }
-
-        if mods.rx() {
-            aim_rating *= 0.9;
-            speed_rating = 0.0;
-            flashlight_rating *= 0.7;
         }
 
         let base_aim_performance = OsuStrainSkill::difficulty_to_performance(aim_rating);
