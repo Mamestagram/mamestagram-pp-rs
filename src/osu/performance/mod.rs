@@ -782,7 +782,7 @@ impl<'map, T: IntoModePerformance<'map, Osu>> From<T> for OsuPerformance<'map> {
 
 // * This is being adjusted to keep the final pp value scaled around what it used to be when changing things.
 pub const PERFORMANCE_BASE_MULTIPLIER: f64 = 1.15;
-pub const PERFORMANCE_BASE_MULTIPLIER_RELAX: f64 = 1.1;
+pub const PERFORMANCE_BASE_MULTIPLIER_RELAX: f64 = 1.15;
 
 struct OsuPerformanceInner<'mods> {
     attrs: OsuDifficultyAttributes,
@@ -844,10 +844,31 @@ impl OsuPerformanceInner<'_> {
         }
     }
 
-    fn calculate_relax(self) -> OsuPerformanceAttributes {
+    fn calculate_relax(mut self) -> OsuPerformanceAttributes {
         let total_hits = f64::from(self.state.total_hits());
 
         let mut multiplier = PERFORMANCE_BASE_MULTIPLIER_RELAX;
+
+        if self.mods.rx() {
+            // * https://www.desmos.com/calculator/bc9eybdthb
+            // * we use OD13.3 as maximum since it's the value at which great hitwidow becomes 0
+            // * this is well beyond currently maximum achievable OD which is 12.17 (DTx2 + DA with OD11)
+            let (n100_mult, n50_mult) = if self.attrs.od > 0.0 {
+                (
+                    (1.0 - (self.attrs.od / 13.33).powf(1.8)).max(0.0),
+                    (1.0 - (self.attrs.od / 13.33).powf(5.0)).max(0.0),
+                )
+            } else {
+                (1.0, 1.0)
+            };
+
+            // * As we're adding Oks and Mehs to an approximated number of combo breaks the result can be
+            // * higher than total hits in specific scenarios (which breaks some calculations) so we need to clamp it.
+            self.effective_miss_count = (self.effective_miss_count
+                + f64::from(self.state.n100) * n100_mult
+                + f64::from(self.state.n50) * n50_mult)
+                .min(total_hits);
+        }
 
         // SO penalty
         if self.mods.so() {
@@ -862,7 +883,7 @@ impl OsuPerformanceInner<'_> {
         let mut acc_depression = 1.0;
         let streams_nerf = ((self.attrs.aim_difficult_strain_count / self.attrs.speed_difficult_strain_count) * 100.0).round() / 100.0;
 
-        if streams_nerf < 1.0 {
+        if streams_nerf < 1.09 {
             let acc_factor = (1.0 - self.acc).abs();
             acc_depression = (0.86 - acc_factor).max(0.5);
 
@@ -871,8 +892,8 @@ impl OsuPerformanceInner<'_> {
             }
         }
 
-        aim_value = aim_value.powf(1.185);
-        speed_value = speed_value.powf(0.75 * acc_depression);
+        aim_value = aim_value.powf(1.1);
+        speed_value = speed_value.powf(1.1);
         acc_value = acc_value.powf(1.1);
 
         let pp = (aim_value + speed_value + acc_value).powf(1.0 / 1.1) * multiplier;
@@ -900,10 +921,12 @@ impl OsuPerformanceInner<'_> {
         aim_value *= len_bonus;
 
         if self.effective_miss_count > 0.0 {
-            aim_value *= Self::calculate_miss_penalty(
-                self.effective_miss_count,
-                self.attrs.aim_difficult_strain_count,
-            );
+            if self.mods.rx() {
+                aim_value *= Self::calculate_relax_miss_penalty(self.total_hits(), self.effective_miss_count);
+            }
+            else {
+                aim_value *= Self::calculate_miss_penalty(self.effective_miss_count, self.attrs.aim_difficult_strain_count);
+            }
         }
 
         let ar_factor = if self.attrs.ar > 10.33 {
@@ -977,7 +1000,7 @@ impl OsuPerformanceInner<'_> {
         if self.effective_miss_count > 0.0 {
             speed_value *= Self::calculate_miss_penalty(
                 self.effective_miss_count,
-                self.attrs.speed_difficult_strain_count,
+                self.attrs.speed_difficult_strain_count
             );
         }
 
@@ -1119,6 +1142,10 @@ impl OsuPerformanceInner<'_> {
     // * to make it more punishing on maps with lower amount of hard sections.
     fn calculate_miss_penalty(miss_count: f64, diff_strain_count: f64) -> f64 {
         0.96 / ((miss_count / (4.0 * diff_strain_count.ln().powf(0.94))) + 1.0)
+    }
+
+    fn calculate_relax_miss_penalty(total_hits: f64, effective_miss_count: f64) -> f64 {
+        0.97 * (1.0 - (effective_miss_count / total_hits).powf(0.5)).powf(1.0 + (effective_miss_count / 1.5))
     }
 
     fn get_combo_scaling_factor(&self) -> f64 {
