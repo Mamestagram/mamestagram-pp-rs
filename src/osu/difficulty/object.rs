@@ -3,7 +3,7 @@ use std::{borrow::Cow, pin::Pin};
 use rosu_map::util::Pos;
 
 use crate::{
-    any::difficulty::object::IDifficultyObject,
+    any::difficulty::object::{HasStartTime, IDifficultyObject},
     osu::object::{OsuObject, OsuObjectKind, OsuSlider},
 };
 
@@ -25,11 +25,12 @@ pub struct OsuDifficultyObject<'a> {
 }
 
 impl<'a> OsuDifficultyObject<'a> {
-    pub const NORMALIZED_RADIUS: f32 = 50.0;
+    pub const NORMALIZED_RADIUS: i32 = 50;
+    pub const NORMALIZED_DIAMETER: i32 = Self::NORMALIZED_RADIUS * 2;
 
     pub const MIN_DELTA_TIME: f64 = 25.0;
-    const MAX_SLIDER_RADIUS: f32 = Self::NORMALIZED_RADIUS * 2.4;
-    const ASSUMED_SLIDER_RADIUS: f32 = Self::NORMALIZED_RADIUS * 1.8;
+    const MAX_SLIDER_RADIUS: f32 = Self::NORMALIZED_RADIUS as f32 * 2.4;
+    const ASSUMED_SLIDER_RADIUS: f32 = Self::NORMALIZED_RADIUS as f32 * 1.8;
 
     pub fn new(
         hit_object: &'a OsuObject,
@@ -234,7 +235,15 @@ impl<'a> OsuDifficultyObject<'a> {
 }
 
 impl IDifficultyObject for OsuDifficultyObject<'_> {
+    type DifficultyObjects = [Self];
+
     fn idx(&self) -> usize {
         self.idx
+    }
+}
+
+impl HasStartTime for OsuDifficultyObject<'_> {
+    fn start_time(&self) -> f64 {
+        self.start_time
     }
 }

@@ -5,7 +5,7 @@
 //! while also providing a significant [boost in performance](#speed).
 //!
 //! Last commits of the ported code:
-//!   - [osu!lazer] : `8bd65d9938a10fc42e6409501b0282f0fa4a25ef` (2024-11-08)
+//!   - [osu!lazer] : `62e536baf6e9f464e8a355d9491f2ac84b21b7b0` (2024-12-24)
 //!   - [osu!tools] : `89b8f3b1c2e4e5674004eac4723120e7d3aef997` (2024-11-03)
 //!
 //! News posts of the latest updates: <https://osu.ppy.sh/home/news/2024-10-28-performance-points-star-rating-updates>
@@ -104,6 +104,7 @@
 //!
 //! Results of a rudimentary [benchmark] of osu!lazer and rosu-pp:
 //! ```txt
+//! osu!lazer:
 //! Decoding maps:            Median: 325.18ms | Mean: 325.50ms
 //! Calculating difficulties: Median: 568.63ms | Mean: 575.97ms
 //! Calculating performances: Median: 256.00µs | Mean: 240.40µs
@@ -161,6 +162,9 @@ pub use self::{
     model::{beatmap::Beatmap, mods::GameMods},
 };
 
+#[macro_use]
+mod util;
+
 /// Types for calculations of any mode.
 pub mod any;
 
@@ -178,5 +182,3 @@ pub mod mania;
 
 /// Types used in and around this crate.
 pub mod model;
-
-mod util;

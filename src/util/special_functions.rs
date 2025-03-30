@@ -195,7 +195,7 @@ fn erf_imp(z: f64, mut invert: bool) -> f64 {
             )
         };
 
-        let g = (-z * z).exp() / z;
+        let g = f64::exp(-z * z) / z;
 
         (g * b) + (g * r)
     } else {
@@ -274,6 +274,7 @@ fn erf_inv_impl(p: f64, q: f64, s: f64) -> f64 {
     result * s
 }
 
+// TODO: const-ify
 fn evaluate_polynomial(z: f64, coefficients: &[f64]) -> f64 {
     let mut coefficients = coefficients.iter().copied().rev();
 
