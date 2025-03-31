@@ -548,7 +548,7 @@ impl OsuPerformanceCalculator<'_> {
     }
 
     fn calculate_relax_miss_penalty(total_hits: f64, effective_miss_count: f64) -> f64 {
-        0.97 * (1.0 - (effective_miss_count / total_hits).powf(0.55)).powf(1.0 + (effective_miss_count / 2.0))
+        (1.0 - (effective_miss_count / total_hits).powf(0.55)).powf(1.0 + (effective_miss_count / 2.0))
     }
 
     fn get_combo_scaling_factor(&self) -> f64 {
