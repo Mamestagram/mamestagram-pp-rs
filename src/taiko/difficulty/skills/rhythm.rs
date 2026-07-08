@@ -24,6 +24,11 @@ impl Rhythm {
     const SKILL_MULTIPLIER: f64 = 1.0;
     const STRAIN_DECAY_BASE: f64 = 0.4;
 
+    /// upstream `GetObjectDifficulties()` 相当。consistency_factor 計算で使う。
+    pub fn object_strains(&self) -> &[f64] {
+        &self.strain_skill_object_strains
+    }
+
     fn strain_value_of(
         &mut self,
         curr: &TaikoDifficultyObject,

@@ -11,14 +11,28 @@ pub struct OsuDifficultyAttributes {
     pub speed: f64,
     /// The difficulty of the flashlight skill.
     pub flashlight: f64,
+    /// The difficulty of the reading skill. upstream: `ReadingDifficulty`.
+    pub reading: f64,
     /// The ratio of the aim strain with and without considering sliders
     pub slider_factor: f64,
+    /// upstream: `AimTopWeightedSliderFactor`. Aim slider weight factor.
+    pub aim_top_weighted_slider_factor: f64,
+    /// upstream: `SpeedTopWeightedSliderFactor`. Speed slider weight factor.
+    pub speed_top_weighted_slider_factor: f64,
     /// The number of clickable objects weighted by difficulty.
     pub speed_note_count: f64,
     /// Weighted sum of aim strains.
     pub aim_difficult_strain_count: f64,
     /// Weighted sum of speed strains.
     pub speed_difficult_strain_count: f64,
+    /// upstream: `ReadingDifficultNoteCount`. Weighted count of reading-difficult notes.
+    pub reading_difficult_note_count: f64,
+    /// upstream: `NestedScorePerObject`. Used by legacy score miss estimation.
+    pub nested_score_per_object: f64,
+    /// upstream: `LegacyScoreBaseMultiplier`. Used by legacy score miss estimation.
+    pub legacy_score_base_multiplier: f64,
+    /// upstream: `MaximumLegacyComboScore`. Used by legacy score miss estimation.
+    pub maximum_legacy_combo_score: f64,
     /// The approach rate.
     pub ar: f64,
     /// The great hit window.
@@ -87,8 +101,18 @@ pub struct OsuPerformanceAttributes {
     pub pp_flashlight: f64,
     /// The speed portion of the final pp.
     pub pp_speed: f64,
+    /// upstream: `Reading`. The reading portion of the final pp.
+    pub pp_reading: f64,
     /// Misses including an approximated amount of slider breaks
     pub effective_miss_count: f64,
+    /// upstream: `ComboBasedEstimatedMissCount`. Miss count estimated from combo drops.
+    pub combo_based_estimated_miss_count: f64,
+    /// upstream: `ScoreBasedEstimatedMissCount`. Miss count estimated from score (classic scores only).
+    pub score_based_estimated_miss_count: Option<f64>,
+    /// upstream: `AimEstimatedSliderBreaks`.
+    pub aim_estimated_slider_breaks: f64,
+    /// upstream: `SpeedEstimatedSliderBreaks`.
+    pub speed_estimated_slider_breaks: f64,
     /// Approximated unstable-rate
     pub speed_deviation: Option<f64>,
 }

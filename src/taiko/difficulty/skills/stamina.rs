@@ -17,6 +17,11 @@ impl Stamina {
     const SKILL_MULTIPLIER: f64 = 1.1;
     const STRAIN_DECAY_BASE: f64 = 0.4;
 
+    /// upstream `GetObjectDifficulties()` 相当。
+    pub fn object_strains(&self) -> &[f64] {
+        &self.strain_skill_object_strains
+    }
+
     fn calculate_initial_strain(
         &mut self,
         time: f64,

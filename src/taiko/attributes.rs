@@ -18,6 +18,13 @@ pub struct TaikoDifficultyAttributes {
     /// The ratio of stamina difficulty from mono-color (single color) streams to total
     /// stamina difficulty.
     pub mono_stamina_factor: f64,
+    /// The mechanical difficulty (sum of colour and stamina difficulties after skill
+    /// rating normalization). upstream: `MechanicalDifficulty`.
+    pub mechanical_difficulty: f64,
+    /// The number of top-weighted stamina strains. upstream: `StaminaTopStrains`.
+    pub stamina_top_strains: f64,
+    /// The factor corresponding to the consistency of a map. upstream: `ConsistencyFactor`.
+    pub consistency_factor: f64,
     /// The final star rating.
     pub stars: f64,
     /// The maximum combo.

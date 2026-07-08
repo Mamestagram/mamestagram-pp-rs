@@ -25,16 +25,14 @@ impl CatchPerformanceCalculator<'_> {
         let stars = attributes.stars;
         let max_combo = attributes.max_combo();
 
-        // Relying heavily on aim
+        // * We are heavily relying on aim in catch the beat
         let mut pp = (5.0 * (stars / 0.0049).max(1.0) - 4.0).powf(2.0) / 100_000.0;
 
-        let mut combo_hits = self.combo_hits();
+        // * Longer maps are worth more. "Longer" means how many hits there are which can contribute to combo
+        // upstream `totalComboHits()` = numMiss + num100 + num300 = misses + droplets + fruits
+        // フォールバック (max_combo で代替) は upstream には存在しないので削除
+        let combo_hits = self.combo_hits();
 
-        if combo_hits == 0 {
-            combo_hits = max_combo;
-        }
-
-        // Longer maps are worth more
         let mut len_bonus = 0.95 + 0.3 * (f64::from(combo_hits) / 2500.0).min(1.0);
 
         if combo_hits > 2500 {
@@ -46,9 +44,10 @@ impl CatchPerformanceCalculator<'_> {
         // Penalize misses exponentially
         pp *= 0.97_f64.powf(f64::from(self.state.misses));
 
-        // Combo scaling
-        if self.state.max_combo > 0 {
-            pp *= (f64::from(self.state.max_combo).powf(0.8) / f64::from(max_combo).powf(0.8))
+        // Combo scaling — upstream の指数は 0.35 (旧 0.8 は誤り)
+        // guard は upstream: catchAttributes.MaxCombo > 0
+        if max_combo > 0 {
+            pp *= (f64::from(self.state.max_combo).powf(0.35) / f64::from(max_combo).powf(0.35))
                 .min(1.0);
         }
 

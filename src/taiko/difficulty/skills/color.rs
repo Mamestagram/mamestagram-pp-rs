@@ -23,6 +23,11 @@ impl Color {
     const SKILL_MULTIPLIER: f64 = 0.12;
     const STRAIN_DECAY_BASE: f64 = 0.8;
 
+    /// upstream `GetObjectDifficulties()` 相当。
+    pub fn object_strains(&self) -> &[f64] {
+        &self.strain_skill_object_strains
+    }
+
     #[allow(clippy::unused_self, reason = "required by `define_skill!` macro")]
     fn strain_value_of(
         &self,

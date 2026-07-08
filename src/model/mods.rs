@@ -315,6 +315,7 @@ impl_has_mod! {
     ap: + Autopilot ["Autopilot"],
     bl: - Blinds ["Blinds"],
     tc: - Traceable ["Traceable"],
+    cl: - Classic ["Classic"],
 }
 
 impl Default for GameMods {

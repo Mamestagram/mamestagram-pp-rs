@@ -21,6 +21,8 @@ define_skill! {
         current_rhythm: f64 = 0.0,
         hit_window: f64,
         has_autopilot_mod: bool,
+        // upstream: `sliderStrains` (slider の totalStrain のみ push)
+        slider_strains: Vec<f64> = Vec::with_capacity(64),
     }
 }
 
@@ -57,7 +59,34 @@ impl Speed {
         ) * Self::SKILL_MULTIPLIER;
         self.current_rhythm = RhythmEvaluator::evaluate_diff_of(curr, objects, self.hit_window);
 
-        self.current_strain * self.current_rhythm
+        let total_strain = self.current_strain * self.current_rhythm;
+
+        // upstream: if (current.BaseObject is Slider) sliderStrains.Add(totalStrain)
+        if matches!(curr.base.kind, crate::osu::object::OsuObjectKind::Slider(_)) {
+            self.slider_strains.push(total_strain);
+        }
+
+        total_strain
+    }
+
+    /// upstream: `CountTopWeightedSliders(difficultyValue)` (Speed 用)。
+    /// upstream Speed は HarmonicSkill だが mames は StrainSkill なので、
+    /// Aim と同じ `consistentTopStrain = difficultyValue * (1 - DecayWeight)` を使う。
+    pub fn count_top_weighted_sliders(&self, difficulty_value: f64) -> f64 {
+        if self.slider_strains.is_empty() {
+            return 0.0;
+        }
+        let consistent_top_strain = difficulty_value * (1.0 - Self::DECAY_WEIGHT);
+        if consistent_top_strain == 0.0 {
+            return 0.0;
+        }
+        self.slider_strains
+            .iter()
+            .copied()
+            .map(|s| {
+                crate::util::difficulty::logistic(s / consistent_top_strain, 0.88, 10.0, Some(1.1))
+            })
+            .sum()
     }
 
     pub fn relevant_note_count(&self) -> f64 {

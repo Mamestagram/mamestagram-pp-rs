@@ -4,7 +4,7 @@ use crate::{
     osu::object::OsuObject,
 };
 
-use self::{aim::Aim, flashlight::Flashlight, speed::Speed};
+use self::{aim::Aim, flashlight::Flashlight, reading::Reading, speed::Speed};
 
 use super::{
     object::OsuDifficultyObject, scaling_factor::ScalingFactor, HD_FADE_IN_DURATION_MULTIPLIER,
@@ -12,6 +12,7 @@ use super::{
 
 pub mod aim;
 pub mod flashlight;
+pub mod reading;
 pub mod speed;
 pub mod strain;
 
@@ -20,6 +21,8 @@ pub struct OsuSkills {
     pub aim_no_sliders: Aim,
     pub speed: Speed,
     pub flashlight: Flashlight,
+    /// upstream: Reading skill (HarmonicSkill 継承)
+    pub reading: Reading,
 }
 
 impl OsuSkills {
@@ -45,16 +48,21 @@ impl OsuSkills {
             400.0 * (time_preempt / OsuObject::PREEMPT_MIN).min(1.0)
         };
 
+        // upstream: OverallDifficulty = (79.5 - greatHitWindow) / 6
+        let overall_difficulty = (79.5 - map_attrs.hit_windows.od_great) / 6.0;
+
         let aim = Aim::new(true);
         let aim_no_sliders = Aim::new(false);
         let speed = Speed::new(hit_window, mods.ap());
         let flashlight = Flashlight::new(mods, scaling_factor.radius, time_preempt, time_fade_in);
+        let reading = Reading::new(mods, time_preempt, overall_difficulty, time_fade_in);
 
         Self {
             aim,
             aim_no_sliders,
             speed,
             flashlight,
+            reading,
         }
     }
 
@@ -63,5 +71,6 @@ impl OsuSkills {
         self.aim_no_sliders.process(curr, objects);
         self.speed.process(curr, objects);
         self.flashlight.process(curr, objects);
+        self.reading.process(curr, objects);
     }
 }

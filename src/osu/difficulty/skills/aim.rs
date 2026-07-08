@@ -75,6 +75,26 @@ impl Aim {
             .sum()
     }
 
+    /// upstream: `CountTopWeightedSliders(difficultyValue)`。
+    /// `consistentTopStrain = difficultyValue * (1 - DecayWeight)`
+    /// `sliderStrains.Sum(s => Logistic(s / consistentTopStrain, 0.88, 10, 1.1))`
+    pub fn count_top_weighted_sliders(&self, difficulty_value: f64) -> f64 {
+        if self.slider_strains.is_empty() {
+            return 0.0;
+        }
+        let consistent_top_strain = difficulty_value * (1.0 - Self::DECAY_WEIGHT);
+        if consistent_top_strain == 0.0 {
+            return 0.0;
+        }
+        self.slider_strains
+            .iter()
+            .copied()
+            .map(|s| {
+                crate::util::difficulty::logistic(s / consistent_top_strain, 0.88, 10.0, Some(1.1))
+            })
+            .sum()
+    }
+
     // From `OsuStrainSkill`; native rather than trait function so that it has
     // priority over `StrainSkill::difficulty_value`
     fn difficulty_value(current_strain_peaks: StrainsVec) -> f64 {

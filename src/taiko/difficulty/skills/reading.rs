@@ -14,6 +14,11 @@ impl Reading {
     const SKILL_MULTIPLIER: f64 = 1.0;
     const STRAIN_DECAY_BASE: f64 = 0.4;
 
+    /// upstream `GetObjectDifficulties()` 相当。
+    pub fn object_strains(&self) -> &[f64] {
+        &self.strain_skill_object_strains
+    }
+
     fn strain_value_of(&mut self, curr: &TaikoDifficultyObject, _: &TaikoDifficultyObjects) -> f64 {
         // * Drum Rolls and Swells are exempt.
         if !curr.base_hit_type.is_hit() {

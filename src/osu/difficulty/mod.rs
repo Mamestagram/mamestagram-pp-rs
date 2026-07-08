@@ -127,6 +127,7 @@ impl DifficultyValues {
             aim_no_sliders,
             speed,
             flashlight,
+            reading,
         } = skills;
 
         let aim_difficulty_value = aim.cloned_difficulty_value();
@@ -212,6 +213,42 @@ impl DifficultyValues {
         attrs.speed_difficult_strain_count = speed_difficult_strain_count;
         attrs.stars = star_rating;
         attrs.speed_note_count = speed.relevant_note_count();
+
+        // upstream OsuDifficultyCalculator.cs:52-59
+        // aimTopWeightedSliderFactor = aimNoSlidersTopWeightedSliderCount /
+        //     max(1, aimNoSlidersDifficultStrainCount - aimNoSlidersTopWeightedSliderCount)
+        // speedTopWeightedSliderFactor = speedTopWeightedSliderCount /
+        //     max(1, speedDifficultStrainCount - speedTopWeightedSliderCount)
+        let aim_no_sliders_difficulty_value = aim_no_sliders.cloned_difficulty_value();
+        let aim_no_sliders_difficult_strain_count =
+            aim_no_sliders.count_top_weighted_strains(aim_no_sliders_difficulty_value);
+        let aim_no_sliders_top_weighted_slider_count =
+            aim_no_sliders.count_top_weighted_sliders(aim_no_sliders_difficulty_value);
+        attrs.aim_top_weighted_slider_factor = aim_no_sliders_top_weighted_slider_count
+            / f64::max(
+                1.0,
+                aim_no_sliders_difficult_strain_count - aim_no_sliders_top_weighted_slider_count,
+            );
+
+        let speed_top_weighted_slider_count = speed.count_top_weighted_sliders(speed_difficulty_value);
+        attrs.speed_top_weighted_slider_factor = speed_top_weighted_slider_count
+            / f64::max(
+                1.0,
+                speed_difficult_strain_count - speed_top_weighted_slider_count,
+            );
+
+        // upstream: Reading skill を DIFFICULTY_MULTIPLIER で rating に scale
+        // NOTE: difficulty_value() は state を書き換えるので、cloned_difficulty_value を先に
+        // 呼ぶ手はあるが、count_top_weighted_object_difficulties は object_weight_sum の
+        // 更新が必要なため mut な cloned インスタンスで両方行う。
+        let (reading_difficulty_value, reading_difficult_note_count) = {
+            let mut cloned = reading.clone_for_eval();
+            let v = cloned.difficulty_value();
+            let n = cloned.count_top_weighted_object_difficulties(v);
+            (v, n)
+        };
+        attrs.reading = reading_difficulty_value.sqrt() * DIFFICULTY_MULTIPLIER;
+        attrs.reading_difficult_note_count = reading_difficult_note_count;
     }
 
     pub fn create_difficulty_objects<'a>(
