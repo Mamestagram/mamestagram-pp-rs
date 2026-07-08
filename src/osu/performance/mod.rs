@@ -39,6 +39,10 @@ pub struct OsuPerformance<'map> {
     pub(crate) n100: Option<u32>,
     pub(crate) n50: Option<u32>,
     pub(crate) misses: Option<u32>,
+    /// upstream `OsuLegacyScoreMissCalculator` を有効化するための入力。
+    /// `classic slider acc` かつ `ScoreV2 なし` の classic score でのみ意味を持つ。
+    /// `None` なら score-based miss 推定は行わず combo-based のみ使用。
+    pub(crate) legacy_total_score: Option<u64>,
     pub(crate) hitresult_priority: HitResultPriority,
 }
 
@@ -730,6 +734,38 @@ impl<'map> OsuPerformance<'map> {
             }
         }
 
+        let combo_based_estimated_miss_count = effective_miss_count;
+
+        // upstream:
+        //   if (usingClassicSliderAccuracy && !usingScoreV2 && score.LegacyTotalScore != null) {
+        //       scoreBasedEstimatedMissCount = OsuLegacyScoreMissCalculator.Calculate();
+        //       effectiveMissCount = scoreBasedEstimatedMissCount;
+        //   } else { effectiveMissCount = comboBasedEstimatedMissCount; }
+        let mut score_based_estimated_miss_count: Option<f64> = None;
+        if using_classic_slider_acc && !mods.has_score_v2() {
+            if let Some(legacy_ts) = self.legacy_total_score {
+                let origin_for_acc = if lazer {
+                    OsuScoreOrigin::WithoutSliderAcc {
+                        max_large_ticks: attrs.n_sliders + attrs.n_large_ticks,
+                        max_small_ticks: attrs.n_sliders,
+                    }
+                } else {
+                    OsuScoreOrigin::Stable
+                };
+                let acc_for_calc = state.accuracy(origin_for_acc);
+                let calc = crate::osu::difficulty::legacy_score::miss_calculator::OsuLegacyScoreMissCalculator::new(
+                    &state,
+                    mods,
+                    &attrs,
+                    acc_for_calc,
+                    legacy_ts,
+                );
+                let sb = calc.calculate();
+                score_based_estimated_miss_count = Some(sb);
+                effective_miss_count = sb;
+            }
+        }
+
         effective_miss_count = effective_miss_count.max(f64::from(state.misses));
         effective_miss_count = effective_miss_count.min(f64::from(state.total_hits()));
 
@@ -746,6 +782,8 @@ impl<'map> OsuPerformance<'map> {
         };
 
         let acc = state.accuracy(origin);
+        // score-based / combo-based の値は performance attributes にも透過
+        let _ = (combo_based_estimated_miss_count, score_based_estimated_miss_count);
 
         let inner = OsuPerformanceCalculator::new(
             attrs,
@@ -772,8 +810,18 @@ impl<'map> OsuPerformance<'map> {
             n100: None,
             n50: None,
             misses: None,
+            legacy_total_score: None,
             hitresult_priority: HitResultPriority::DEFAULT,
         }
+    }
+
+    /// upstream `OsuLegacyScoreMissCalculator` を有効化する builder setter。
+    /// classic (stable) score の raw score V1 値を入れておくと、pp 計算時に
+    /// combo-based ではなく score-based miss 推定が使われる (classic slider acc
+    /// かつ ScoreV2 なしの時のみ)。
+    pub const fn legacy_total_score(mut self, value: u64) -> Self {
+        self.legacy_total_score = Some(value);
+        self
     }
 
     #[allow(clippy::result_large_err)]

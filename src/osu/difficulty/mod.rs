@@ -20,6 +20,7 @@ use self::skills::OsuSkills;
 use super::attributes::OsuDifficultyAttributes;
 
 pub mod gradual;
+pub mod legacy_score;
 mod object;
 pub mod scaling_factor;
 pub mod skills;
@@ -102,6 +103,25 @@ impl DifficultyValues {
             take,
             &mut attrs,
         );
+
+        // upstream: OsuLegacyScoreSimulator を回して MaximumLegacyComboScore を得る。
+        // 同時に LegacyScoreBaseMultiplier (peppy_stars) と NestedScorePerObject も計算。
+        // これらは convert 後の osu_objects と base map から計算するので、difficulty
+        // skills を回す前後どちらでも良いが、attrs の他フィールドと近い位置に置く。
+        let object_count = attrs.max_combo.saturating_sub(0); // placeholder — 実際は total object count
+        let n_objects = attrs.n_circles + attrs.n_sliders + attrs.n_spinners;
+        let peppy_stars =
+            legacy_score::utils::calculate_difficulty_peppy_stars(map, n_objects);
+        attrs.legacy_score_base_multiplier = peppy_stars;
+        attrs.nested_score_per_object =
+            legacy_score::utils::calculate_nested_score_per_object(&osu_objects, n_objects);
+        let legacy_attrs =
+            legacy_score::simulator::simulate(&osu_objects, peppy_stars);
+        attrs.maximum_legacy_combo_score = legacy_attrs.combo_score;
+        // upstream の LegacyScoreAttributes.MaxCombo と mames の max_combo が一致するはず
+        // (念のためデバッグ時に確認する箇所)
+        let _ = object_count;
+        let _ = legacy_attrs.max_combo;
 
         let osu_object_iter = osu_objects.iter_mut().map(Pin::new);
 

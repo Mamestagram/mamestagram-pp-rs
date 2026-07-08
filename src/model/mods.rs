@@ -316,6 +316,10 @@ impl_has_mod! {
     bl: - Blinds ["Blinds"],
     tc: - Traceable ["Traceable"],
     cl: - Classic ["Classic"],
+    // upstream `OsuLegacyScoreMissCalculator` で必要な mod flag
+    dt: + DoubleTime ["DoubleTime"],
+    ht: + HalfTime ["HalfTime"],
+    has_score_v2: - ScoreV2 ["ScoreV2"],
 }
 
 impl Default for GameMods {
