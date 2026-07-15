@@ -1,6 +1,7 @@
 pub use inner::*;
 
 #[cfg(not(feature = "raw_strains"))]
+#[allow(dead_code)]
 mod inner {
     use std::{
         iter::{self, Copied},
@@ -375,6 +376,7 @@ mod inner {
 }
 
 #[cfg(feature = "raw_strains")]
+#[allow(dead_code)]
 mod inner {
     use std::{
         iter::Copied,

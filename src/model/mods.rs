@@ -27,7 +27,7 @@ pub mod reexports {
 /// # Example
 ///
 /// ```
-/// use rosu_pp::GameMods;
+/// use mames_pp::GameMods;
 /// use rosu_mods::{GameModsIntermode, GameModsLegacy, GameMods as GameModsLazer};
 ///
 /// let int = GameMods::from(64 + 8);
@@ -319,7 +319,7 @@ impl_has_mod! {
     // upstream `OsuLegacyScoreMissCalculator` で必要な mod flag
     dt: + DoubleTime ["DoubleTime"],
     ht: + HalfTime ["HalfTime"],
-    has_score_v2: - ScoreV2 ["ScoreV2"],
+    has_score_v2: + ScoreV2 ["ScoreV2"],
 }
 
 impl Default for GameMods {

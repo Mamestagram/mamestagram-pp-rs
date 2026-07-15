@@ -710,10 +710,8 @@ impl<'map> OsuPerformance<'map> {
                 } else {
                     0
                 };
-                let max_possible_slider_breaks = i32::min(
-                    attrs.n_sliders as i32,
-                    (combo_diff as i32) / 2,
-                );
+                let max_possible_slider_breaks =
+                    i32::min(attrs.n_sliders as i32, (combo_diff as i32) / 2);
                 let slider_breaks = effective_miss_count - f64::from(state.misses);
                 if slider_breaks > f64::from(max_possible_slider_breaks) {
                     effective_miss_count =
@@ -782,15 +780,14 @@ impl<'map> OsuPerformance<'map> {
         };
 
         let acc = state.accuracy(origin);
-        // score-based / combo-based の値は performance attributes にも透過
-        let _ = (combo_based_estimated_miss_count, score_based_estimated_miss_count);
-
         let inner = OsuPerformanceCalculator::new(
             attrs,
             mods,
             acc,
             state,
             effective_miss_count,
+            combo_based_estimated_miss_count,
+            score_based_estimated_miss_count,
             using_classic_slider_acc,
         );
 

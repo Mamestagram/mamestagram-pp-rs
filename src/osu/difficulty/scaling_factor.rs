@@ -23,16 +23,14 @@ impl ScalingFactor {
             * BROKEN_GAMEFIELD_ROUNDING_ALLOWANCE;
 
         let radius = f64::from(OsuObject::OBJECT_RADIUS * scale);
+        // Distance normalisation and the high-CS bonus are separate in lazer.
+        // Keeping the bonus in this factor changes every jump and slider distance
+        // before the individual skill evaluators get a chance to apply their
+        // skill-specific `SmallCircleBonus` exponent.
         let factor = OsuDifficultyObject::NORMALIZED_RADIUS as f32 / radius as f32;
 
-        let factor_with_small_circle_bonus = if radius < 30.0 {
-            factor * (1.0 + (30.0 - radius as f32).min(5.0) / 50.0)
-        } else {
-            factor
-        };
-
         Self {
-            factor: factor_with_small_circle_bonus,
+            factor,
             radius,
             scale,
         }

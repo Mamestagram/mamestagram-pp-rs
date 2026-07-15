@@ -2,9 +2,7 @@ use std::f64::consts::PI;
 
 use crate::{
     osu::{
-        difficulty::skills::{
-            aim::Aim, flashlight::Flashlight, speed::Speed, strain::OsuStrainSkill,
-        },
+        difficulty::skills::{aim::Aim, speed::Speed},
         OsuDifficultyAttributes, OsuPerformanceAttributes, OsuScoreState,
     },
     util::{
@@ -24,12 +22,19 @@ pub const PERFORMANCE_NORM_EXPONENT: f64 = 1.1;
 // relax は本 fork の独自計算なので既存の値を保持
 pub const PERFORMANCE_BASE_MULTIPLIER_RELAX: f64 = 1.15;
 
+// DiffUtils.SQRT2 is deliberately one ULP below std::f64::consts::SQRT_2.
+// Retain that exact value because this feeds into lazer's speed deviation.
+#[allow(clippy::approx_constant, clippy::excessive_precision)]
+const LAZER_SQRT_2: f64 = 1.414_213_562_373_095_0;
+
 pub(super) struct OsuPerformanceCalculator<'mods> {
     attrs: OsuDifficultyAttributes,
     mods: &'mods GameMods,
     acc: f64,
     state: OsuScoreState,
     effective_miss_count: f64,
+    combo_based_estimated_miss_count: f64,
+    score_based_estimated_miss_count: Option<f64>,
     using_classic_slider_acc: bool,
 }
 
@@ -40,6 +45,8 @@ impl<'a> OsuPerformanceCalculator<'a> {
         acc: f64,
         state: OsuScoreState,
         effective_miss_count: f64,
+        combo_based_estimated_miss_count: f64,
+        score_based_estimated_miss_count: Option<f64>,
         using_classic_slider_acc: bool,
     ) -> Self {
         Self {
@@ -48,6 +55,8 @@ impl<'a> OsuPerformanceCalculator<'a> {
             acc,
             state,
             effective_miss_count,
+            combo_based_estimated_miss_count,
+            score_based_estimated_miss_count,
             using_classic_slider_acc,
         }
     }
@@ -64,7 +73,7 @@ impl OsuPerformanceCalculator<'_> {
             };
         }
 
-        // RX/AP は fork の独自計算に routing
+        // RX は fork の独自計算に routing
         if self.mods.rx() {
             return self.calculate_relax();
         }
@@ -88,20 +97,23 @@ impl OsuPerformanceCalculator<'_> {
         }
 
         // Slider break estimation
-        let (aim_estimated_slider_breaks, speed_estimated_slider_breaks) =
-            if self.effective_miss_count > 0.0 {
-                (
-                    self.calculate_estimated_slider_breaks(self.attrs.aim_top_weighted_slider_factor),
-                    self.calculate_estimated_slider_breaks(self.attrs.speed_top_weighted_slider_factor),
-                )
-            } else {
-                (0.0, 0.0)
-            };
+        let (aim_estimated_slider_breaks, speed_estimated_slider_breaks) = if self
+            .effective_miss_count
+            > 0.0
+        {
+            (
+                self.calculate_estimated_slider_breaks(self.attrs.aim_top_weighted_slider_factor),
+                self.calculate_estimated_slider_breaks(self.attrs.speed_top_weighted_slider_factor),
+            )
+        } else {
+            (0.0, 0.0)
+        };
 
         let speed_deviation = self.calculate_speed_deviation();
 
         let aim_value = self.compute_aim_value_vanilla(aim_estimated_slider_breaks);
-        let speed_value = self.compute_speed_value_vanilla(speed_deviation, speed_estimated_slider_breaks);
+        let speed_value =
+            self.compute_speed_value_vanilla(speed_deviation, speed_estimated_slider_breaks);
         let acc_value = self.compute_accuracy_value_vanilla();
 
         let reading_value = self.compute_reading_value_vanilla(aim_estimated_slider_breaks);
@@ -124,8 +136,8 @@ impl OsuPerformanceCalculator<'_> {
             pp_reading: reading_value,
             pp,
             effective_miss_count: self.effective_miss_count,
-            combo_based_estimated_miss_count: self.effective_miss_count,
-            score_based_estimated_miss_count: None,
+            combo_based_estimated_miss_count: self.combo_based_estimated_miss_count,
+            score_based_estimated_miss_count: self.score_based_estimated_miss_count,
             aim_estimated_slider_breaks,
             speed_estimated_slider_breaks,
             speed_deviation,
@@ -177,8 +189,8 @@ impl OsuPerformanceCalculator<'_> {
             pp_reading: 0.0,
             pp,
             effective_miss_count: self.effective_miss_count,
-            combo_based_estimated_miss_count: self.effective_miss_count,
-            score_based_estimated_miss_count: None,
+            combo_based_estimated_miss_count: self.combo_based_estimated_miss_count,
+            score_based_estimated_miss_count: self.score_based_estimated_miss_count,
             aim_estimated_slider_breaks: 0.0,
             speed_estimated_slider_breaks: 0.0,
             speed_deviation,
@@ -249,10 +261,15 @@ impl OsuPerformanceCalculator<'_> {
 
         if self.effective_miss_count > 0.0 {
             if self.mods.rx() {
-                aim_value *= Self::calculate_relax_miss_penalty(self.total_hits(), self.effective_miss_count);
-            }
-            else {
-                aim_value *= Self::calculate_miss_penalty(self.effective_miss_count, self.attrs.aim_difficult_strain_count);
+                aim_value *= Self::calculate_relax_miss_penalty(
+                    self.total_hits(),
+                    self.effective_miss_count,
+                );
+            } else {
+                aim_value *= Self::calculate_miss_penalty(
+                    self.effective_miss_count,
+                    self.attrs.aim_difficult_strain_count,
+                );
             }
         }
 
@@ -302,14 +319,16 @@ impl OsuPerformanceCalculator<'_> {
 
         if self.effective_miss_count > 0.0 {
             if self.mods.rx() {
-                speed_value *= Self::calculate_relax_miss_penalty(self.total_hits(), self.effective_miss_count);
-            }
-            else {
+                speed_value *= Self::calculate_relax_miss_penalty(
+                    self.total_hits(),
+                    self.effective_miss_count,
+                );
+            } else {
                 speed_value *= Self::calculate_miss_penalty(
                     self.effective_miss_count,
-                    self.attrs.speed_difficult_strain_count
+                    self.attrs.speed_difficult_strain_count,
                 );
-            }      
+            }
         }
 
         let ar_factor = if self.attrs.ar > 10.33 {
@@ -414,39 +433,6 @@ impl OsuPerformanceCalculator<'_> {
         acc_value
     }
 
-    fn compute_flashlight_value(&self) -> f64 {
-        if !self.mods.fl() {
-            return 0.0;
-        }
-
-        let mut flashlight_value = Flashlight::difficulty_to_performance(self.attrs.flashlight);
-
-        let total_hits = self.total_hits();
-
-        // * Penalize misses by assessing # of misses relative to the total # of objects. Default a 3% reduction for any # of misses.
-        if self.effective_miss_count > 0.0 {
-            flashlight_value *= 0.97
-                * (1.0 - (self.effective_miss_count / total_hits).powf(0.775))
-                    .powf(self.effective_miss_count.powf(0.875));
-        }
-
-        flashlight_value *= self.get_combo_scaling_factor();
-
-        // * Account for shorter maps having a higher ratio of 0 combo/100 combo flashlight radius.
-        flashlight_value *= 0.7
-            + 0.1 * (total_hits / 200.0).min(1.0)
-            + f64::from(u8::from(total_hits > 200.0))
-                * 0.2
-                * ((total_hits - 200.0) / 200.0).min(1.0);
-
-        // * Scale the flashlight value with accuracy _slightly_.
-        flashlight_value *= 0.5 + self.acc / 2.0;
-        // * It is important to also consider accuracy difficulty when doing that.
-        flashlight_value *= 0.98 + f64::powf(f64::max(0.0, self.attrs.od()), 2.0) / 2500.0;
-
-        flashlight_value
-    }
-
     fn calculate_speed_deviation(&self) -> Option<f64> {
         if total_successful_hits(&self.state) == 0 {
             return None;
@@ -472,12 +458,7 @@ impl OsuPerformanceCalculator<'_> {
             speed_note_count - relevant_count_miss - relevant_count_meh - relevant_count_ok,
         );
 
-        self.calculate_deviation(
-            relevant_count_great,
-            relevant_count_ok,
-            relevant_count_meh,
-            relevant_count_miss,
-        )
+        self.calculate_deviation(relevant_count_great, relevant_count_ok, relevant_count_meh)
     }
 
     fn calculate_deviation(
@@ -485,53 +466,46 @@ impl OsuPerformanceCalculator<'_> {
         relevant_count_great: f64,
         relevant_count_ok: f64,
         relevant_count_meh: f64,
-        relevant_count_miss: f64,
     ) -> Option<f64> {
         if relevant_count_great + relevant_count_ok + relevant_count_meh <= 0.0 {
             return None;
         }
 
-        let object_count =
-            relevant_count_great + relevant_count_ok + relevant_count_meh + relevant_count_miss;
-
-        // * The probability that a player hits a circle is unknown, but we can estimate it to be
-        // * the number of greats on circles divided by the number of circles, and then add one
-        // * to the number of circles as a bias correction.
-
-        let n = f64::max(1.0, object_count - relevant_count_miss - relevant_count_meh);
+        // * The sample proportion of successful hits.
+        let n = f64::max(1.0, relevant_count_great + relevant_count_ok);
+        let p = relevant_count_great / n;
 
         #[allow(clippy::items_after_statements, clippy::unreadable_literal)]
         const Z: f64 = 2.32634787404; // * 99% critical value for the normal distribution (one-tailed).
 
-        // * Proportion of greats hit on circles, ignoring misses and 50s.
-        let p = relevant_count_great / n;
-
-        // * We can be 99% confident that p is at least this value.
-        let p_lower_bound = (n * p + Z * Z / 2.0) / (n + Z * Z)
-            - Z / (n + Z * Z) * f64::sqrt(n * p * (1.0 - p) + Z * Z / 4.0);
+        // * We can be 99% confident that the population proportion is at
+        // * least this value.
+        let p_lower_bound = p.min(
+            (n * p + Z * Z / 2.0) / (n + Z * Z)
+                - Z / (n + Z * Z) * f64::sqrt(n * p * (1.0 - p) + Z * Z / 4.0),
+        );
 
         let great_hit_window: f64 = self.attrs.great_hit_window;
         let ok_hit_window: f64 = self.attrs.ok_hit_window;
         let meh_hit_window: f64 = self.attrs.meh_hit_window;
 
-        // * Compute the deviation assuming greats and oks are normally distributed, and mehs are uniformly distributed.
-        // * Begin with greats and oks first. Ignoring mehs, we can be 99% confident that the deviation is not higher than:
-        let mut deviation = great_hit_window / (f64::sqrt(2.0) * erf_inv(p_lower_bound));
+        // * Tested max precision for the deviation calculation.
+        let deviation = if p_lower_bound > 0.01 {
+            // * Compute deviation assuming greats and oks are normally distributed.
+            let mut deviation = great_hit_window / (LAZER_SQRT_2 * erf_inv(p_lower_bound));
 
-        let random_value = f64::sqrt(2.0 / PI)
-            * ok_hit_window
-            * f64::exp(-0.5 * f64::powf(ok_hit_window / deviation, 2.0))
-            / (deviation * erf(ok_hit_window / (f64::sqrt(2.0) * deviation)));
+            // * Subtract the variance provided by tails outside the ok window.
+            let ratio = ok_hit_window / deviation;
+            let ok_hit_window_tail_amount =
+                f64::sqrt(2.0 / PI) * ok_hit_window * f64::exp(-0.5 * ratio * ratio)
+                    / (deviation * erf(ok_hit_window / (LAZER_SQRT_2 * deviation)));
 
-        deviation *= f64::sqrt(1.0 - random_value);
-
-        // * Value deviation approach as greatCount approaches 0
-        let limit_value = ok_hit_window / f64::sqrt(3.0);
-
-        // * If precision is not enough to compute true deviation - use limit value
-        if p_lower_bound.eq(0.0) || random_value >= 1.0 || deviation > limit_value {
-            deviation = limit_value;
-        }
+            deviation *= f64::sqrt(1.0 - ok_hit_window_tail_amount);
+            deviation
+        } else {
+            // * Tested limit for a score containing only oks.
+            ok_hit_window / f64::sqrt(3.0)
+        };
 
         // * Then compute the variance for mehs.
         let meh_variance = (meh_hit_window * meh_hit_window
@@ -541,7 +515,7 @@ impl OsuPerformanceCalculator<'_> {
 
         // * Find the total deviation.
         let deviation = f64::sqrt(
-            ((relevant_count_great + relevant_count_ok) * f64::powf(deviation, 2.0)
+            ((relevant_count_great + relevant_count_ok) * deviation * deviation
                 + relevant_count_meh * meh_variance)
                 / (relevant_count_great + relevant_count_ok + relevant_count_meh),
         );
@@ -583,7 +557,8 @@ impl OsuPerformanceCalculator<'_> {
     }
 
     fn calculate_relax_miss_penalty(total_hits: f64, effective_miss_count: f64) -> f64 {
-        (1.0 - (effective_miss_count / total_hits).powf(0.55)).powf(1.0 + (effective_miss_count / 2.0))
+        (1.0 - (effective_miss_count / total_hits).powf(0.55))
+            .powf(1.0 + (effective_miss_count / 2.0))
     }
 
     fn get_combo_scaling_factor(&self) -> f64 {
@@ -658,7 +633,8 @@ impl OsuPerformanceCalculator<'_> {
         if self.effective_miss_count > 0.0 {
             let relevant_miss_count = f64::min(
                 self.effective_miss_count + aim_slider_breaks,
-                total_imperfect_hits(&self.state) + f64::from(n_large_tick_miss(&self.attrs, &self.state)),
+                total_imperfect_hits(&self.state)
+                    + f64::from(n_large_tick_miss(&self.attrs, &self.state)),
             );
             aim_value *= Self::calculate_miss_penalty(
                 relevant_miss_count,
@@ -682,21 +658,22 @@ impl OsuPerformanceCalculator<'_> {
     }
 
     // upstream: computeSpeedValue
-    fn compute_speed_value_vanilla(&self, speed_deviation: Option<f64>, speed_slider_breaks: f64) -> f64 {
+    fn compute_speed_value_vanilla(
+        &self,
+        speed_deviation: Option<f64>,
+        speed_slider_breaks: f64,
+    ) -> f64 {
         let Some(speed_deviation) = speed_deviation else {
             return 0.0;
         };
-        if self.mods.ap() {
-            return 0.0;
-        }
-
         // upstream: HarmonicSkill.DifficultyToPerformance(speed) = 4 * pow(speed, 3)
         let mut speed_value = 4.0 * self.attrs.speed.powi(3);
 
         if self.effective_miss_count > 0.0 {
             let relevant_miss_count = f64::min(
                 self.effective_miss_count + speed_slider_breaks,
-                total_imperfect_hits(&self.state) + f64::from(n_large_tick_miss(&self.attrs, &self.state)),
+                total_imperfect_hits(&self.state)
+                    + f64::from(n_large_tick_miss(&self.attrs, &self.state)),
             );
             speed_value *= Self::calculate_miss_penalty(
                 relevant_miss_count,
@@ -708,7 +685,8 @@ impl OsuPerformanceCalculator<'_> {
             speed_value *= 1.12;
         }
 
-        let speed_high_deviation_mult = self.calculate_speed_high_deviation_nerf_vanilla(speed_deviation);
+        let speed_high_deviation_mult =
+            self.calculate_speed_high_deviation_nerf_vanilla(speed_deviation);
         speed_value *= speed_high_deviation_mult;
 
         // upstream: effectiveHitWindow = 20 * pow(4/speed, 0.35)
@@ -726,7 +704,7 @@ impl OsuPerformanceCalculator<'_> {
     // upstream: computeAccuracyValue
     fn compute_accuracy_value_vanilla(&self) -> f64 {
         let mut amount_hit_objects_with_acc = self.attrs.n_circles;
-        if !self.using_classic_slider_acc {
+        if !self.using_classic_slider_acc || self.mods.has_score_v2() {
             amount_hit_objects_with_acc += self.attrs.n_sliders;
         }
 
@@ -776,9 +754,8 @@ impl OsuPerformanceCalculator<'_> {
             return 0.0;
         }
 
-        // upstream: Flashlight.DifficultyToPerformance
-        // Flashlight は Aim と同じ formula: 4 * pow(fl, 3)
-        let mut flashlight_value = 4.0 * self.attrs.flashlight.powi(3);
+        // upstream: Flashlight.DifficultyToPerformance = 25 * pow(difficulty, 2)
+        let mut flashlight_value = 25.0 * self.attrs.flashlight.powi(2);
 
         let total_hits = self.total_hits();
 
@@ -824,7 +801,8 @@ impl OsuPerformanceCalculator<'_> {
             return 0.0;
         }
 
-        let missed_combo_percent = 1.0 - f64::from(self.state.max_combo) / f64::from(self.attrs.max_combo);
+        let missed_combo_percent =
+            1.0 - f64::from(self.state.max_combo) / f64::from(self.attrs.max_combo);
         let mut estimated = f64::min(
             non_miss_mistakes,
             self.effective_miss_count * top_weighted_slider_factor,
@@ -853,7 +831,8 @@ impl OsuPerformanceCalculator<'_> {
                 0.025 * (7.0 - f64::max(approach_rate, 0.0)) * low_ar_slider_visibility;
         }
         if approach_rate < 0.0 {
-            traceable_bonus += 0.025 * (1.0 - 1.5_f64.powf(approach_rate)) * low_ar_slider_visibility;
+            traceable_bonus +=
+                0.025 * (1.0 - 1.5_f64.powf(approach_rate)) * low_ar_slider_visibility;
         }
 
         traceable_bonus

@@ -6,8 +6,7 @@
 //!   `(HP + OD + CS + clamp(obj/drain*8, 0, 16)) / 38 * 5` を計算。
 
 use crate::{
-    model::hit_object::HitObjectKind,
-    osu::object::{NestedSliderObjectKind, OsuObject, OsuObjectKind},
+    osu::object::{OsuObject, OsuObjectKind},
     Beatmap,
 };
 
@@ -37,11 +36,8 @@ pub fn calculate_nested_score_per_object(osu_objects: &[OsuObject], object_count
                     .count() as i64;
                 amount_big_ticks += 2 + repeat_count;
                 // upstream: `amountOfSmallTicks += s.NestedHitObjects.Count(SliderTick)`
-                let tick_count = slider
-                    .nested_objects
-                    .iter()
-                    .filter(|n| n.is_tick())
-                    .count() as i64;
+                let tick_count =
+                    slider.nested_objects.iter().filter(|n| n.is_tick()).count() as i64;
                 amount_small_ticks += tick_count;
             }
             OsuObjectKind::Spinner(spinner) => {
@@ -65,8 +61,7 @@ fn calculate_spinner_score(duration_ms: f64) -> f64 {
     const MINIMUM_ROTATIONS_PER_SECOND: f64 = 3.0;
 
     let seconds_duration = duration_ms / 1000.0;
-    let total_half_spins_possible =
-        (seconds_duration * MAXIMUM_ROTATIONS_PER_SECOND * 2.0) as i64;
+    let total_half_spins_possible = (seconds_duration * MAXIMUM_ROTATIONS_PER_SECOND * 2.0) as i64;
     let half_spins_required_for_completion =
         (seconds_duration * MINIMUM_ROTATIONS_PER_SECOND) as i64;
     let half_spins_required_before_bonus = half_spins_required_for_completion + 3;
@@ -87,8 +82,11 @@ fn calculate_spinner_score(duration_ms: f64) -> f64 {
 ///
 /// mames-pp では f64 で計算するが upstream は decimal (128bit fixed) で計算するので
 /// **極端な精度が要求される個別譜面では 1 ずれる可能性あり**。実用上は無視できる範囲。
-pub fn calculate_difficulty_peppy_stars(map: &Beatmap, object_count: u32) -> f64 {
-    let drain_length = calculate_drain_length(map, object_count);
+pub fn calculate_difficulty_peppy_stars(map: &Beatmap) -> f64 {
+    // The score multiplier always belongs to WorkingBeatmap.Beatmap, even
+    // when difficulty is calculated for a progressive (passed_objects) map.
+    let object_count = map.hit_objects.len() as u32;
+    let drain_length = calculate_drain_length(map);
     let obj_to_drain_ratio = if drain_length != 0 {
         let raw = (object_count as f64 / drain_length as f64) * 8.0;
         raw.clamp(0.0, 16.0)
@@ -105,25 +103,24 @@ pub fn calculate_difficulty_peppy_stars(map: &Beatmap, object_count: u32) -> f64
 
 /// upstream: `LegacyScoreUtils.CalculateDifficultyPeppyStars`
 /// (drainLength は break を除いた秒数)。
-fn calculate_drain_length(map: &Beatmap, object_count: u32) -> i32 {
-    if object_count == 0 || map.hit_objects.is_empty() {
+fn calculate_drain_length(map: &Beatmap) -> i32 {
+    if map.hit_objects.is_empty() {
         return 0;
     }
 
-    let first_start = map.hit_objects[0].start_time;
-    let last_start_time = map
-        .hit_objects
-        .last()
-        .map(|h| match h.kind {
-            HitObjectKind::Spinner(ref spinner) => h.start_time + spinner.duration,
-            HitObjectKind::Hold(ref hold) => h.start_time + hold.duration,
-            _ => h.start_time,
+    let first_start = map.hit_objects[0].start_time.round_ties_even() as i32;
+    let last_start = map.hit_objects[map.hit_objects.len() - 1]
+        .start_time
+        .round_ties_even() as i32;
+    let break_length: i32 = map
+        .breaks
+        .iter()
+        .map(|break_period| {
+            break_period.end_time.round_ties_even() as i32
+                - break_period.start_time.round_ties_even() as i32
         })
-        .unwrap_or(first_start);
+        .sum();
 
-    // break は rosu-map 側の Beatmap 直下では持ってないので 0 とする
-    // (実 upstream は BreakPeriod の集計。実運用上ほとんどの譜面で break は数秒〜数十秒、
-    //  スコア倍率への影響は 1 未満で peppy_stars の round 前後で差が出るケースは稀)。
-    let drain_ms = last_start_time.round() as i32 - first_start.round() as i32;
+    let drain_ms = last_start - first_start - break_length;
     drain_ms / 1000
 }

@@ -15,8 +15,8 @@ use crate::{
 use self::osu_objects::OsuObjects;
 
 use super::{
-    object::OsuDifficultyObject, skills::OsuSkills, DifficultyValues, OsuDifficultyAttributes,
-    OsuDifficultySetup,
+    legacy_score, object::OsuDifficultyObject, skills::OsuSkills, DifficultyValues,
+    OsuDifficultyAttributes, OsuDifficultySetup,
 };
 
 /// Gradually calculate the difficulty attributes of an osu!standard map.
@@ -32,8 +32,8 @@ use super::{
 /// # Example
 ///
 /// ```
-/// use rosu_pp::{Beatmap, Difficulty};
-/// use rosu_pp::osu::{Osu, OsuGradualDifficulty};
+/// use mames_pp::{Beatmap, Difficulty};
+/// use mames_pp::osu::{Osu, OsuGradualDifficulty};
 ///
 /// let map = Beatmap::from_path("./resources/2785319.osu").unwrap();
 ///
@@ -91,6 +91,14 @@ impl OsuGradualDifficulty {
             &mut attrs,
         );
 
+        // In lazer this is calculated from WorkingBeatmap.Beatmap (the full
+        // map), while the other two legacy attributes use the progressive
+        // beatmap prefix.
+        attrs.legacy_score_base_multiplier =
+            legacy_score::utils::calculate_difficulty_peppy_stars(&map);
+        attrs.nested_score_per_object = 0.0;
+        attrs.maximum_legacy_combo_score = 0.0;
+
         attrs.n_circles = 0;
         attrs.n_sliders = 0;
         attrs.n_large_ticks = 0;
@@ -107,9 +115,18 @@ impl OsuGradualDifficulty {
             &difficulty,
             &scaling_factor,
             osu_objects.iter_mut(),
+            time_preempt,
+            (79.5 - attrs.great_hit_window) / 6.0,
         );
 
-        let skills = OsuSkills::new(mods, &scaling_factor, &map_attrs, time_preempt);
+        let skills = OsuSkills::new(
+            mods,
+            &scaling_factor,
+            &map_attrs,
+            time_preempt,
+            map.hit_objects.len(),
+            attrs.great_hit_window,
+        );
         let diff_objects = extend_lifetime(diff_objects.into_boxed_slice());
 
         Ok(Self {
@@ -135,6 +152,17 @@ impl OsuGradualDifficulty {
             }
             OsuObjectKind::Spinner { .. } => attrs.n_spinners += 1,
         }
+    }
+
+    fn update_legacy_score_attributes(&mut self) {
+        let objects = &self.osu_objects.as_slice()[..self.idx];
+        let object_count = self.idx as u32;
+
+        self.attrs.nested_score_per_object =
+            legacy_score::utils::calculate_nested_score_per_object(objects, object_count);
+        self.attrs.maximum_legacy_combo_score =
+            legacy_score::simulator::simulate(objects, self.attrs.legacy_score_base_multiplier)
+                .combo_score;
     }
 }
 
@@ -162,6 +190,7 @@ impl Iterator for OsuGradualDifficulty {
             self.skills.aim_no_sliders.process(curr, &self.diff_objects);
             self.skills.speed.process(curr, &self.diff_objects);
             self.skills.flashlight.process(curr, &self.diff_objects);
+            self.skills.reading.process(curr, &self.diff_objects);
 
             Self::increment_combo(curr.base, &mut self.attrs);
         } else if self.osu_objects.is_empty() {
@@ -169,6 +198,7 @@ impl Iterator for OsuGradualDifficulty {
         }
 
         self.idx += 1;
+        self.update_legacy_score_attributes();
 
         let mut attrs = self.attrs.clone();
 
@@ -227,6 +257,10 @@ mod osu_objects {
 
         pub(super) const fn is_empty(&self) -> bool {
             self.objects.is_empty()
+        }
+
+        pub(super) const fn as_slice(&self) -> &[OsuObject] {
+            &self.objects
         }
 
         pub(super) fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = Pin<&mut OsuObject>> {

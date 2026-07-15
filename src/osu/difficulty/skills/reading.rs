@@ -35,8 +35,7 @@ pub struct Reading {
     magnetised_strength: f64,
 
     // evaluator 側で使う map-wide 定数
-    preempt: f64,
-    overall_difficulty: f64,
+    time_preempt: f64,
 
     /// evaluator 経由で `opacity_at` に必要
     time_fade_in: f64,
@@ -59,12 +58,7 @@ impl Reading {
     /// upstream: `reduced_difficulty_duration = 60 * 1000` (60 秒間 memorize と仮定)
     const REDUCED_DIFFICULTY_DURATION: f64 = 60_000.0;
 
-    pub fn new(
-        mods: &GameMods,
-        preempt: f64,
-        overall_difficulty: f64,
-        time_fade_in: f64,
-    ) -> Self {
+    pub fn new(mods: &GameMods, preempt: f64, time_fade_in: f64) -> Self {
         Self {
             object_difficulties: Vec::new(),
             object_start_times: Vec::new(),
@@ -74,8 +68,7 @@ impl Reading {
             has_relax_mod: mods.rx(),
             has_autopilot_mod: mods.ap(),
             magnetised_strength: 0.0, // 未サポート mod、後で拡張可能
-            preempt,
-            overall_difficulty,
+            time_preempt: preempt,
             time_fade_in,
             object_weight_sum: 0.0,
         }
@@ -103,7 +96,7 @@ impl Reading {
             curr,
             objects,
             self.has_hidden_mod,
-            self.preempt,
+            self.time_preempt,
             self.time_fade_in,
         );
 
@@ -121,8 +114,7 @@ impl Reading {
         }
 
         // upstream: `0.825 + Pow(max(0, OD), 2.2) / 1125.0`
-        difficulty *= 0.825
-            + f64::max(0.0, self.overall_difficulty).powf(2.2) / 1125.0;
+        difficulty *= 0.825 + f64::max(0.0, curr.overall_difficulty).powf(2.2) / 1125.0;
 
         difficulty
     }
@@ -146,7 +138,7 @@ impl Reading {
             // upstream: scale = log10(lerp(1, 10, clamp(i/reducedNoteCount, 0, 1)))
             let ratio = (i as f64 / reduced_note_count as f64).clamp(0.0, 1.0);
             let scale = (1.0 + ratio * 9.0).log10(); // = log10(lerp(1, 10, ratio))
-            // upstream: lerp(reduced_difficulty_base_line, 1.0, scale) = scale (base = 0)
+                                                     // upstream: lerp(reduced_difficulty_base_line, 1.0, scale) = scale (base = 0)
             difficulties[i] *= scale;
         }
         difficulties
@@ -215,12 +207,6 @@ impl Reading {
             .sum()
     }
 
-    /// 現状の difficulty_value を pure 参照から計算する版 (state は変えない)。
-    pub fn cloned_difficulty_value(&self) -> f64 {
-        let mut cloned = self.clone_for_eval();
-        cloned.difficulty_value()
-    }
-
     /// difficulty_value + count_top_weighted_object_difficulties を両方 evaluate したいとき
     /// 用の mut clone。呼び出し側で mut に持って両 API を叩ける。
     pub fn clone_for_eval(&self) -> Reading {
@@ -233,8 +219,7 @@ impl Reading {
             has_relax_mod: self.has_relax_mod,
             has_autopilot_mod: self.has_autopilot_mod,
             magnetised_strength: self.magnetised_strength,
-            preempt: self.preempt,
-            overall_difficulty: self.overall_difficulty,
+            time_preempt: self.time_preempt,
             time_fade_in: self.time_fade_in,
             object_weight_sum: 0.0,
         }
@@ -255,7 +240,7 @@ struct ReadingEvaluator;
 
 impl ReadingEvaluator {
     const READING_WINDOW_SIZE: f64 = 3000.0; // 3 秒
-    // upstream: NORMALISED_DIAMETER * 1.5 (直径の 1.5 倍)
+                                             // upstream: NORMALISED_DIAMETER * 1.5 (直径の 1.5 倍)
     const DISTANCE_INFLUENCE_THRESHOLD: f64 =
         (OsuDifficultyObject::NORMALIZED_DIAMETER as f64) * 1.5;
 
@@ -263,7 +248,7 @@ impl ReadingEvaluator {
         curr: &OsuDifficultyObject<'_>,
         objects: &[OsuDifficultyObject<'_>],
         hidden: bool,
-        preempt: f64,
+        time_preempt: f64,
         time_fade_in: f64,
     ) -> f64 {
         if curr.base.is_spinner() || curr.idx == 0 {
@@ -274,10 +259,14 @@ impl ReadingEvaluator {
         // upstream: `Max(1, LazyJumpDistance / AdjustedDeltaTime)` (buff only)
         let velocity = f64::max(1.0, curr.lazy_jump_dist / curr.strain_time);
 
-        let current_visible_object_density =
-            Self::retrieve_current_visible_object_density(curr, objects, preempt);
+        let current_visible_object_density = Self::retrieve_current_visible_object_density(
+            curr,
+            objects,
+            time_preempt,
+            time_fade_in,
+        );
         let past_object_difficulty_influence =
-            Self::get_past_object_difficulty_influence(curr, objects, preempt);
+            Self::get_past_object_difficulty_influence(curr, objects, time_preempt, time_fade_in);
         let constant_angle_nerf_factor = Self::get_constant_angle_nerf_factor(curr, objects);
 
         let note_density_difficulty = Self::calculate_density_difficulty(
@@ -296,7 +285,7 @@ impl ReadingEvaluator {
                 current_visible_object_density,
                 velocity,
                 constant_angle_nerf_factor,
-                preempt,
+                time_preempt,
                 time_fade_in,
             )
         } else {
@@ -304,12 +293,16 @@ impl ReadingEvaluator {
         };
 
         let preempt_difficulty =
-            Self::calculate_preempt_difficulty(velocity, constant_angle_nerf_factor, preempt);
+            Self::calculate_preempt_difficulty(velocity, constant_angle_nerf_factor, curr.preempt);
 
         // upstream: `Norm(1.5, preempt, hidden, noteDensity)`
         let reading_difficulty = norm_p(
             1.5,
-            &[preempt_difficulty, hidden_difficulty, note_density_difficulty],
+            &[
+                preempt_difficulty,
+                hidden_difficulty,
+                note_density_difficulty,
+            ],
         );
 
         // upstream: `readingDifficulty *= highBpmBonus(AdjustedDeltaTime)`
@@ -359,8 +352,8 @@ impl ReadingEvaluator {
 
         // upstream: `(preemptStart - preempt + Abs(preempt - preemptStart)) / 2` = max(preemptStart - preempt, 0)
         // (これは平滑 relu の形)
-        let shifted = (PREEMPT_STARTING_POINT - preempt + (preempt - PREEMPT_STARTING_POINT).abs())
-            / 2.0;
+        let shifted =
+            (PREEMPT_STARTING_POINT - preempt + (preempt - PREEMPT_STARTING_POINT).abs()) / 2.0;
         let mut preempt_difficulty = shifted.powf(2.5) / PREEMPT_BALANCING_FACTOR;
         preempt_difficulty *= constant_angle_nerf_factor * velocity;
         preempt_difficulty
@@ -374,12 +367,12 @@ impl ReadingEvaluator {
         current_visible_object_density: f64,
         velocity: f64,
         constant_angle_nerf_factor: f64,
-        preempt: f64,
+        time_preempt: f64,
         time_fade_in: f64,
     ) -> f64 {
         const HIDDEN_MULTIPLIER: f64 = 0.28;
 
-        let preempt_factor = preempt.powf(2.2) * 0.01;
+        let preempt_factor = curr.preempt.powf(2.2) * 0.01;
         let density_factor =
             (current_visible_object_density + past_object_difficulty_influence).powf(3.3) * 3.0;
 
@@ -392,8 +385,8 @@ impl ReadingEvaluator {
             return hidden_difficulty;
         };
         if curr.lazy_jump_dist == 0.0
-            && curr.opacity_at(prev.base.start_time, true, preempt, time_fade_in) == 0.0
-            && prev.start_time > curr.start_time - preempt
+            && curr.opacity_at(prev.base.start_time, true, time_preempt, time_fade_in) == 0.0
+            && prev.start_time > curr.start_time - curr.preempt
         {
             hidden_difficulty += HIDDEN_MULTIPLIER * 2500.0 / curr.strain_time.powf(1.5);
         }
@@ -403,7 +396,8 @@ impl ReadingEvaluator {
     fn get_past_object_difficulty_influence(
         curr: &OsuDifficultyObject<'_>,
         objects: &[OsuDifficultyObject<'_>],
-        preempt: f64,
+        time_preempt: f64,
+        time_fade_in: f64,
     ) -> f64 {
         let mut influence = 0.0;
         // upstream: retrievePastVisibleObjects
@@ -413,11 +407,12 @@ impl ReadingEvaluator {
             };
             // reading window / preempt 判定 → 抜け
             if curr.start_time - loop_obj.start_time > Self::READING_WINDOW_SIZE
-                || loop_obj.start_time < curr.start_time - preempt
+                || loop_obj.start_time < curr.start_time - curr.preempt
             {
                 break;
             }
-            let mut loop_difficulty = curr.opacity_at(loop_obj.base.start_time, false, preempt, 0.0);
+            let mut loop_difficulty =
+                curr.opacity_at(loop_obj.base.start_time, false, time_preempt, time_fade_in);
             loop_difficulty *= smootherstep(
                 loop_obj.lazy_jump_dist,
                 15.0,
@@ -433,7 +428,8 @@ impl ReadingEvaluator {
     fn retrieve_current_visible_object_density(
         curr: &OsuDifficultyObject<'_>,
         objects: &[OsuDifficultyObject<'_>],
-        preempt: f64,
+        time_preempt: f64,
+        time_fade_in: f64,
     ) -> f64 {
         let mut density = 0.0;
         let mut idx_offset = 0usize;
@@ -442,13 +438,16 @@ impl ReadingEvaluator {
                 break;
             };
             let dt = loop_obj.start_time - curr.start_time;
-            if dt > Self::READING_WINDOW_SIZE || curr.start_time < loop_obj.start_time - preempt {
+            if dt > Self::READING_WINDOW_SIZE
+                || curr.start_time < loop_obj.start_time - loop_obj.preempt
+            {
                 break;
             }
             let time_nerf = Self::get_time_nerf_factor(dt);
             // upstream: loopObj.OpacityAt(current.BaseObject.StartTime, false)
             // ← ここは loopObj の opacity_at を curr の base start_time で見る
-            density += loop_obj.opacity_at(curr.base.start_time, false, preempt, 0.0) * time_nerf;
+            density += loop_obj.opacity_at(curr.base.start_time, false, time_preempt, time_fade_in)
+                * time_nerf;
             idx_offset += 1;
         }
         density
@@ -468,12 +467,9 @@ impl ReadingEvaluator {
         let mut current_time_gap = 0.0;
 
         // Chain to keep previous 3 objects (for alternating angle detection)
-        let mut prev0_idx: Option<usize> = None; // most recent
+        let mut prev0_idx: Option<usize> = Some(curr.idx); // most recent
         let mut prev1_idx: Option<usize> = None;
         let mut prev2_idx: Option<usize> = None;
-        // seed: prev0 = curr itself
-        let curr_idx_in_seed = curr.idx;
-
         while current_time_gap < MINIMUM_ANGLE_RELEVANCY_TIME {
             let Some(loop_obj) = curr.previous(idx, objects) else {
                 break;
@@ -490,15 +486,9 @@ impl ReadingEvaluator {
                 let mut angle_difference_alternating = std::f64::consts::PI;
 
                 // alternating detection needs 3 anchor angles + curr
-                let seed_or = |i: Option<usize>| -> Option<&OsuDifficultyObject<'_>> {
-                    match i {
-                        Some(seed) if seed == curr_idx_in_seed => Some(curr),
-                        Some(seed) => objects.get(seed),
-                        None => None,
-                    }
-                };
+                let seed_or = |i: Option<usize>| i.and_then(|index| objects.get(index));
                 if let (Some(p0), Some(p1), Some(p2)) =
-                    (seed_or(prev0_idx.or(Some(curr_idx_in_seed))), seed_or(prev1_idx), seed_or(prev2_idx))
+                    (seed_or(prev0_idx), seed_or(prev1_idx), seed_or(prev2_idx))
                 {
                     if let (Some(p0_ang), Some(p1_ang), Some(p2_ang)) =
                         (p0.angle, p1.angle, p2.angle)
@@ -517,8 +507,8 @@ impl ReadingEvaluator {
                             60.0,
                             120.0,
                         );
-                        angle_difference_alternating =
-                            (std::f64::consts::PI) * (1.0 - weight) + 0.1 * angle_difference_alternating * weight;
+                        angle_difference_alternating = (std::f64::consts::PI) * (1.0 - weight)
+                            + 0.1 * angle_difference_alternating * weight;
                     }
                 }
 

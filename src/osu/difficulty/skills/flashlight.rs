@@ -3,7 +3,7 @@ use std::cmp;
 use crate::{
     any::difficulty::{
         object::{HasStartTime, IDifficultyObject},
-        skills::strain_decay,
+        skills::{strain_decay, StrainSkill},
     },
     osu::{difficulty::object::OsuDifficultyObject, object::OsuObjectKind},
     util::strains_vec::StrainsVec,
@@ -13,25 +13,41 @@ use crate::{
 define_skill! {
     pub struct Flashlight: StrainSkill => [OsuDifficultyObject<'a>][OsuDifficultyObject<'a>] {
         current_strain: f64,
+        has_flashlight_mod: bool,
         has_hidden_mod: bool,
+        has_touch_device_mod: bool,
+        has_relax_mod: bool,
+        has_autopilot_mod: bool,
+        total_objects: usize,
         evaluator: FlashlightEvaluator = todo!(),
     }
 
-    pub fn new(mods: &GameMods, radius: f64, time_preempt: f64, time_fade_in: f64) -> Self {
+    pub fn new(
+        mods: &GameMods,
+        radius: f64,
+        time_preempt: f64,
+        time_fade_in: f64,
+        total_objects: usize
+    ) -> Self {
         {
             let scaling_factor = 52.0 / radius;
         }
 
         Self {
             current_strain: 0.0,
+            has_flashlight_mod: mods.fl(),
             has_hidden_mod: mods.hd(),
+            has_touch_device_mod: mods.td(),
+            has_relax_mod: mods.rx(),
+            has_autopilot_mod: mods.ap(),
+            total_objects: total_objects,
             evaluator: FlashlightEvaluator::new(scaling_factor, time_preempt, time_fade_in),
         }
     }
 }
 
 impl Flashlight {
-    const SKILL_MULTIPLIER: f64 = 0.05512;
+    const SKILL_MULTIPLIER: f64 = 0.058;
     const STRAIN_DECAY_BASE: f64 = 0.15;
 
     fn calculate_initial_strain(
@@ -52,11 +68,29 @@ impl Flashlight {
         curr: &OsuDifficultyObject<'_>,
         objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
+        if !self.has_flashlight_mod {
+            return 0.0;
+        }
+
         self.current_strain *= strain_decay(curr.delta_time, Self::STRAIN_DECAY_BASE);
-        self.current_strain += self
+        let mut difficulty = self
             .evaluator
-            .evaluate_diff_of(curr, objects, self.has_hidden_mod)
-            * Self::SKILL_MULTIPLIER;
+            .evaluate_diff_of(curr, objects, self.has_hidden_mod);
+
+        if self.has_touch_device_mod {
+            difficulty = difficulty.powf(0.9);
+        }
+
+        if self.has_relax_mod {
+            difficulty *= 0.7;
+        }
+
+        if self.has_autopilot_mod {
+            difficulty *= 0.4;
+        }
+
+        difficulty *= 0.985 + curr.overall_difficulty.max(0.0).powi(2) / 4000.0;
+        self.current_strain += difficulty * Self::SKILL_MULTIPLIER;
 
         self.current_strain
     }
@@ -67,6 +101,23 @@ impl Flashlight {
     )]
     fn difficulty_value(current_strain_peaks: StrainsVec) -> f64 {
         current_strain_peaks.sum()
+    }
+
+    pub fn lazer_difficulty_value(&self) -> f64 {
+        let peaks = <Self as StrainSkill>::get_current_strain_peaks(
+            self.strain_skill_strain_peaks.clone(),
+            self.strain_skill_current_section_peak,
+        );
+        let total_objects = self.total_objects as f64;
+        let short_map_scaling = 0.7
+            + 0.1 * (total_objects / 200.0).min(1.0)
+            + if self.total_objects > 200 {
+                0.2 * ((total_objects - 200.0) / 200.0).min(1.0)
+            } else {
+                0.0
+            };
+
+        peaks.sum() * short_map_scaling
     }
 
     pub fn difficulty_to_performance(difficulty: f64) -> f64 {
@@ -182,7 +233,7 @@ impl FlashlightEvaluator {
 
         if let OsuObjectKind::Slider(slider) = &osu_curr.base.kind {
             // * Invert the scaling factor to determine the true travel distance independent of circle size.
-            let pixel_travel_dist = f64::from(slider.lazy_travel_dist) / self.scaling_factor;
+            let pixel_travel_dist = slider.lazy_travel_dist / self.scaling_factor;
 
             // * Reward sliders based on velocity.
             slider_bonus = ((pixel_travel_dist / osu_curr.travel_time - Self::MIN_VELOCITY)

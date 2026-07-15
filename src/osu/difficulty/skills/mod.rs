@@ -14,7 +14,6 @@ pub mod aim;
 pub mod flashlight;
 pub mod reading;
 pub mod speed;
-pub mod strain;
 
 pub struct OsuSkills {
     pub aim: Aim,
@@ -29,10 +28,12 @@ impl OsuSkills {
     pub fn new(
         mods: &GameMods,
         scaling_factor: &ScalingFactor,
-        map_attrs: &BeatmapAttributes,
+        _map_attrs: &BeatmapAttributes,
         time_preempt: f64,
+        total_objects: usize,
+        great_hit_window: f64,
     ) -> Self {
-        let hit_window = 2.0 * map_attrs.hit_windows.od_great;
+        let hit_window = 2.0 * great_hit_window;
 
         // * Preempt time can go below 450ms. Normally, this is achieved via the DT mod
         // * which uniformly speeds up all animations game wide regardless of AR.
@@ -48,14 +49,17 @@ impl OsuSkills {
             400.0 * (time_preempt / OsuObject::PREEMPT_MIN).min(1.0)
         };
 
-        // upstream: OverallDifficulty = (79.5 - greatHitWindow) / 6
-        let overall_difficulty = (79.5 - map_attrs.hit_windows.od_great) / 6.0;
-
-        let aim = Aim::new(true);
-        let aim_no_sliders = Aim::new(false);
-        let speed = Speed::new(hit_window, mods.ap());
-        let flashlight = Flashlight::new(mods, scaling_factor.radius, time_preempt, time_fade_in);
-        let reading = Reading::new(mods, time_preempt, overall_difficulty, time_fade_in);
+        let aim = Aim::new(mods, true);
+        let aim_no_sliders = Aim::new(mods, false);
+        let speed = Speed::new(hit_window, mods);
+        let flashlight = Flashlight::new(
+            mods,
+            scaling_factor.radius,
+            time_preempt,
+            time_fade_in,
+            total_objects,
+        );
+        let reading = Reading::new(mods, time_preempt, time_fade_in);
 
         Self {
             aim,

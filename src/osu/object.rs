@@ -151,13 +151,6 @@ impl OsuObject {
         self.end_pos() + self.stack_offset
     }
 
-    pub const fn lazy_travel_time(&self) -> f64 {
-        match self.kind {
-            OsuObjectKind::Circle | OsuObjectKind::Spinner(_) => 0.0,
-            OsuObjectKind::Slider(ref slider) => slider.lazy_travel_time,
-        }
-    }
-
     pub const fn is_circle(&self) -> bool {
         matches!(self.kind, OsuObjectKind::Circle)
     }
@@ -180,7 +173,9 @@ pub enum OsuObjectKind {
 pub struct OsuSlider {
     pub end_time: f64,
     pub lazy_end_pos: Pos,
-    pub lazy_travel_dist: f32,
+    // lazer accumulates this in `double`. Keeping it as f32 introduces a
+    // visible star-rating drift on long and repeated sliders.
+    pub lazy_travel_dist: f64,
     pub lazy_travel_time: f64,
     pub nested_objects: Vec<NestedSliderObject>,
 }

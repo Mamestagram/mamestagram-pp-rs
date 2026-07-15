@@ -55,7 +55,75 @@ mod consts {
 #[allow(clippy::wildcard_imports)]
 use consts::*;
 
+/// Error function approximation used by osu!lazer's `DiffUtils.Erf`.
 pub fn erf(x: f64) -> f64 {
+    if x == 0.0 {
+        return 0.0;
+    }
+
+    if x == f64::INFINITY {
+        return 1.0;
+    }
+
+    if x == f64::NEG_INFINITY {
+        return -1.0;
+    }
+
+    if x.is_nan() {
+        return f64::NAN;
+    }
+
+    // Abramowitz and Stegun formula 7.1.26. Keep the operation order in
+    // sync with lazer because this approximation is also used by pp.
+    let t = 1.0 / (1.0 + 0.3275911 * x.abs());
+    let tau = t
+        * (0.254829592
+            + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+    let result = 1.0 - tau * (-x * x).exp();
+
+    if x >= 0.0 {
+        result
+    } else {
+        -result
+    }
+}
+
+/// Inverse error function approximation used by osu!lazer's
+/// `DiffUtils.ErfInv`.
+pub fn erf_inv(z: f64) -> f64 {
+    if z <= -1.0 {
+        return f64::NEG_INFINITY;
+    }
+
+    if z >= 1.0 {
+        return f64::INFINITY;
+    }
+
+    if z == 0.0 {
+        return 0.0;
+    }
+
+    const A: f64 = 0.147;
+
+    let sign = z.signum();
+    let z = z.abs();
+    let ln = (1.0 - z * z).ln();
+    let t1 = 2.0 / (std::f64::consts::PI * A) + ln / 2.0;
+    let t2 = ln / A;
+    let base_approx = (t1 * t1 - t2).sqrt() - t1;
+    let correction = if z >= 0.85 {
+        ((z - 0.85) / 0.293).powf(8.0)
+    } else {
+        0.0
+    };
+
+    sign * (base_approx.sqrt() + correction)
+}
+
+// Retain the high-precision implementations for callers that need them. The
+// public osu! difficulty helpers above intentionally use lazer's approximations.
+#[allow(dead_code)]
+fn erf_precise(x: f64) -> f64 {
     if x.abs() < f64::EPSILON {
         return 0.0;
     }
@@ -75,7 +143,8 @@ pub fn erf(x: f64) -> f64 {
     erf_imp(x, false)
 }
 
-pub fn erf_inv(z: f64) -> f64 {
+#[allow(dead_code)]
+fn erf_inv_precise(z: f64) -> f64 {
     if z.abs() < f64::EPSILON {
         return 0.0;
     }

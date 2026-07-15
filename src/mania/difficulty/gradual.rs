@@ -26,8 +26,8 @@ use super::{
 /// # Example
 ///
 /// ```
-/// use rosu_pp::{Beatmap, Difficulty};
-/// use rosu_pp::mania::ManiaGradualDifficulty;
+/// use mames_pp::{Beatmap, Difficulty};
+/// use mames_pp::mania::ManiaGradualDifficulty;
 ///
 /// let map = Beatmap::from_path("./resources/1638954.osu").unwrap();
 ///

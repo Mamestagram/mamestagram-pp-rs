@@ -44,6 +44,13 @@ pub fn smoothstep(x: f64, start: f64, end: f64) -> f64 {
     x * x * (3.0 - 2.0 * x)
 }
 
+pub fn smoothstep_bell_curve(mut x: f64) -> f64 {
+    x = 0.5 - (x - 0.5).abs();
+    x = (x * 2.0).clamp(0.0, 1.0);
+
+    x * x * (3.0 - 2.0 * x)
+}
+
 pub fn smootherstep(x: f64, start: f64, end: f64) -> f64 {
     let x = reverse_lerp(x, start, end);
 
