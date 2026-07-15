@@ -282,8 +282,12 @@ impl BeatmapAttributesBuilder {
                     mod_mult(self.od.value(mods, GameMods::od))
                 };
 
-                let great = difficulty_range(f64::from(raw_od), TAIKO_GREAT) / od_clock_rate;
-                let ok = difficulty_range(f64::from(raw_od), TAIKO_OK) / od_clock_rate;
+                // Taiko hit windows are floored and shifted before clock-rate adjustment.
+                // See `TaikoHitWindows.SetDifficulty` in lazer.
+                let great = (difficulty_range(f64::from(raw_od), TAIKO_GREAT).floor() - 0.5)
+                    / od_clock_rate;
+                let ok =
+                    (difficulty_range(f64::from(raw_od), TAIKO_OK).floor() - 0.5) / od_clock_rate;
 
                 (great, Some(ok), None)
             }

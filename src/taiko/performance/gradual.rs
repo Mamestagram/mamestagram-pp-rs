@@ -130,9 +130,71 @@ impl TaikoGradualPerformance {
 
 #[cfg(test)]
 mod tests {
-    use crate::{taiko::TaikoPerformance, Beatmap};
+    use crate::{
+        taiko::{TaikoPerformance, TaikoPerformanceAttributes},
+        Beatmap,
+    };
 
     use super::*;
+
+    fn assert_float_eq(actual: f64, expected: f64) {
+        assert!(actual == expected || (actual.is_nan() && expected.is_nan()));
+    }
+
+    fn assert_attrs_eq(actual: &TaikoPerformanceAttributes, expected: &TaikoPerformanceAttributes) {
+        let actual_difficulty = &actual.difficulty;
+        let expected_difficulty = &expected.difficulty;
+
+        for (actual, expected) in [
+            (actual_difficulty.stamina, expected_difficulty.stamina),
+            (actual_difficulty.rhythm, expected_difficulty.rhythm),
+            (actual_difficulty.color, expected_difficulty.color),
+            (actual_difficulty.reading, expected_difficulty.reading),
+            (
+                actual_difficulty.great_hit_window,
+                expected_difficulty.great_hit_window,
+            ),
+            (
+                actual_difficulty.ok_hit_window,
+                expected_difficulty.ok_hit_window,
+            ),
+            (
+                actual_difficulty.mono_stamina_factor,
+                expected_difficulty.mono_stamina_factor,
+            ),
+            (
+                actual_difficulty.mechanical_difficulty,
+                expected_difficulty.mechanical_difficulty,
+            ),
+            (
+                actual_difficulty.stamina_top_strains,
+                expected_difficulty.stamina_top_strains,
+            ),
+            (
+                actual_difficulty.consistency_factor,
+                expected_difficulty.consistency_factor,
+            ),
+            (actual_difficulty.stars, expected_difficulty.stars),
+            (actual.pp, expected.pp),
+            (actual.pp_acc, expected.pp_acc),
+            (actual.pp_difficulty, expected.pp_difficulty),
+            (actual.effective_miss_count, expected.effective_miss_count),
+        ] {
+            assert_float_eq(actual, expected);
+        }
+
+        assert_eq!(actual_difficulty.max_combo, expected_difficulty.max_combo);
+        assert_eq!(actual_difficulty.is_convert, expected_difficulty.is_convert);
+
+        match (
+            actual.estimated_unstable_rate,
+            expected.estimated_unstable_rate,
+        ) {
+            (Some(actual), Some(expected)) => assert_float_eq(actual, expected),
+            (None, None) => {}
+            values => panic!("unstable rate mismatch: {values:?}"),
+        }
+    }
 
     #[test]
     fn next_and_nth() {
@@ -162,12 +224,12 @@ mod tests {
 
             if i % 2 == 0 {
                 let next_gradual_2nd = gradual_2nd.nth(state, 1).unwrap();
-                assert_eq!(next_gradual, next_gradual_2nd);
+                assert_attrs_eq(&next_gradual, &next_gradual_2nd);
             }
 
             if i % 3 == 0 {
                 let next_gradual_3rd = gradual_3rd.nth(state, 2).unwrap();
-                assert_eq!(next_gradual, next_gradual_3rd);
+                assert_attrs_eq(&next_gradual, &next_gradual_3rd);
             }
 
             let mut regular_calc = TaikoPerformance::new(&map)
@@ -180,7 +242,7 @@ mod tests {
 
             let expected = regular_calc.calculate().unwrap();
 
-            assert_eq!(next_gradual, expected);
+            assert_attrs_eq(&next_gradual, &expected);
         }
     }
 }

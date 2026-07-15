@@ -9,7 +9,7 @@ use crate::{
         object::{TaikoDifficultyObject, TaikoDifficultyObjects},
     },
     util::{
-        difficulty::logistic_exp,
+        difficulty::{logistic_exp, smootherstep},
         sync::{RefCount, Weak},
     },
 };
@@ -50,36 +50,60 @@ impl ColorEvaluator {
         let threshold = threshold.unwrap_or(0.01);
         let max_objects_to_check = max_objects_to_check.unwrap_or(64);
 
-        let curr = hit_object;
-
         let mut consistent_ratio_count = 0;
         let mut total_ratio_count = 0.0;
+        let mut recent_ratios = Vec::new();
 
-        let prev_objects =
-            &objects.objects[curr.idx.saturating_sub(2 * max_objects_to_check)..=curr.idx];
+        let Some(previous_hit_object) = hit_object
+            .idx
+            .checked_sub(2)
+            .and_then(|idx| objects.objects.get(idx))
+        else {
+            return 1.0;
+        };
 
-        for window in prev_objects.windows(3).rev().step_by(2) {
-            let [prev, _, curr] = window else {
-                unreachable!()
-            };
+        let previous_hit_object = previous_hit_object.get();
+        let mut current = hit_object;
 
-            let curr = curr.get();
-            let prev = prev.get();
+        for _ in 0..max_objects_to_check {
+            if current.idx <= 1 {
+                break;
+            }
 
-            let curr_ratio = curr.rhythm_data.ratio;
-            let prev_ratio = prev.rhythm_data.ratio;
+            let current_ratio = current.rhythm_data.ratio;
+            let previous_ratio = previous_hit_object.rhythm_data.ratio;
+
+            recent_ratios.push(current_ratio);
 
             // * A consistent interval is defined as the percentage difference between the two rhythmic ratios with the margin of error.
-            if f64::abs(1.0 - curr_ratio / prev_ratio) <= threshold {
+            if f64::abs(1.0 - current_ratio / previous_ratio) <= threshold {
                 consistent_ratio_count += 1;
-                total_ratio_count += curr_ratio;
+                total_ratio_count += current_ratio;
 
                 break;
             }
+
+            // Keep this assignment in sync with lazer. `previous_hit_object` is
+            // intentionally captured once before the loop.
+            current = &previous_hit_object;
         }
 
         // * Ensure no division by zero
-        1.0 - total_ratio_count / f64::from(consistent_ratio_count + 1) * 0.8
+        if consistent_ratio_count > 0 {
+            return 1.0 - total_ratio_count / f64::from(consistent_ratio_count + 1) * 0.8;
+        }
+
+        if recent_ratios.len() <= 1 {
+            return 1.0;
+        }
+
+        let average = recent_ratios.iter().sum::<f64>() / recent_ratios.len() as f64;
+        let max_ratio_deviation = recent_ratios
+            .iter()
+            .map(|ratio| (ratio - average).abs())
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        0.7 + 0.3 * smootherstep(max_ratio_deviation, 0.0, 1.0)
     }
 
     fn evaluate_difficulty_of(

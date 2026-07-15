@@ -103,7 +103,8 @@ impl TaikoGradualDifficulty {
             difficulty.get_mods(),
         );
 
-        let skills = TaikoSkills::new(od_great, map.is_convert);
+        // `DifficultyHitObject.HitWindowGreat` in lazer is the full hit window.
+        let skills = TaikoSkills::new(od_great * 2.0, map.is_convert);
 
         let attrs = TaikoDifficultyAttributes {
             great_hit_window: od_great,
@@ -269,6 +270,27 @@ mod tests {
 
     use super::*;
 
+    fn assert_attrs_eq(actual: &TaikoDifficultyAttributes, expected: &TaikoDifficultyAttributes) {
+        for (actual, expected) in [
+            (actual.stamina, expected.stamina),
+            (actual.rhythm, expected.rhythm),
+            (actual.color, expected.color),
+            (actual.reading, expected.reading),
+            (actual.great_hit_window, expected.great_hit_window),
+            (actual.ok_hit_window, expected.ok_hit_window),
+            (actual.mono_stamina_factor, expected.mono_stamina_factor),
+            (actual.mechanical_difficulty, expected.mechanical_difficulty),
+            (actual.stamina_top_strains, expected.stamina_top_strains),
+            (actual.consistency_factor, expected.consistency_factor),
+            (actual.stars, expected.stars),
+        ] {
+            assert!(actual == expected || (actual.is_nan() && expected.is_nan()));
+        }
+
+        assert_eq!(actual.max_combo, expected.max_combo);
+        assert_eq!(actual.is_convert, expected.is_convert);
+    }
+
     #[test]
     fn empty() {
         let map = Beatmap::from_bytes(&[]).unwrap();
@@ -300,12 +322,12 @@ mod tests {
 
             if i % 2 == 0 {
                 let next_gradual_2nd = gradual_2nd.nth(1).unwrap();
-                assert_eq!(next_gradual, next_gradual_2nd);
+                assert_attrs_eq(&next_gradual, &next_gradual_2nd);
             }
 
             if i % 3 == 0 {
                 let next_gradual_3rd = gradual_3rd.nth(2).unwrap();
-                assert_eq!(next_gradual, next_gradual_3rd);
+                assert_attrs_eq(&next_gradual, &next_gradual_3rd);
             }
 
             let expected = difficulty
@@ -314,7 +336,7 @@ mod tests {
                 .calculate_for_mode::<Taiko>(&map)
                 .unwrap();
 
-            assert_eq!(next_gradual, expected);
+            assert_attrs_eq(&next_gradual, &expected);
         }
     }
 }

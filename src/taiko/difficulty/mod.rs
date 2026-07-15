@@ -238,7 +238,9 @@ impl DifficultyValues {
         // The first hit object has no difficulty object
         n_diff_objects = n_diff_objects.saturating_sub(1);
 
-        let mut skills = TaikoSkills::new(great_hit_window, converted.is_convert);
+        // lazer's `DifficultyHitObject.HitWindowGreat` is the full hit window while
+        // difficulty attributes expose the one-sided hit window used by performance.
+        let mut skills = TaikoSkills::new(great_hit_window * 2.0, converted.is_convert);
 
         for hit_object in diff_objects.iter().take(n_diff_objects) {
             skills.rhythm.process(&hit_object.get(), &diff_objects);
@@ -273,10 +275,10 @@ impl DifficultyValues {
         let stamina_rating = stamina_difficulty_value * STAMINA_SKILL_MULTIPLIER;
         let mono_stamina_rating =
             single_color_stamina.into_difficulty_value() * STAMINA_SKILL_MULTIPLIER;
-        let mono_stamina_factor = if stamina_rating.abs() >= f64::EPSILON {
-            (mono_stamina_rating / stamina_rating).powf(5.0)
-        } else {
+        let mono_stamina_factor = if stamina_rating == 0.0 {
             1.0
+        } else {
+            (mono_stamina_rating / stamina_rating).powf(5.0)
         };
 
         let stamina_difficult_strains =
@@ -305,11 +307,9 @@ impl DifficultyValues {
         // upstream TaikoDifficultyCalculator.cs:128-135
         // 各 skill difficulty を star_rating に比例するように正規化
         let sum_skill_ratings = rhythm_rating + reading_rating + color_rating + stamina_rating;
-        let skill_rating_factor = if sum_skill_ratings > 0.0 {
-            star_rating / sum_skill_ratings
-        } else {
-            0.0
-        };
+        // Keep lazer's unguarded division semantics. The first two timed
+        // attributes consequently expose NaN skill components.
+        let skill_rating_factor = star_rating / sum_skill_ratings;
 
         attrs.rhythm = rhythm_rating * skill_rating_factor;
         attrs.reading = reading_rating * skill_rating_factor;

@@ -6,7 +6,7 @@ use crate::{
         rhythm::data::same_rhythm_hit_object_grouping::SameRhythmHitObjectGrouping,
     },
     util::{
-        difficulty::{bell_curve, logistic},
+        difficulty::{bell_curve, logistic, reverse_lerp},
         sync::RefCount,
     },
 };
@@ -54,6 +54,7 @@ impl RhythmEvaluator {
         let mut same_rhythm = 0.0;
         let mut same_pattern = 0.0;
         let mut interval_penalty = 0.0;
+        let mut gap_penalty = 0.0;
 
         // * Difficulty for SameRhythmGroupedHitObjects
         if let Some(ref same_rhythm_grouped) = rhythm_data.same_rhythm_grouped_hit_objects {
@@ -65,6 +66,7 @@ impl RhythmEvaluator {
                 same_rhythm += 10.0 * Self::evaluate_diff_of_(same_rhythm_grouped, hit_window);
                 interval_penalty =
                     Self::repeated_interval_penalty(same_rhythm_grouped, hit_window, None);
+                gap_penalty = Self::long_gap_penalty(same_rhythm_grouped.get().upgraded_previous());
             }
         }
 
@@ -80,7 +82,7 @@ impl RhythmEvaluator {
             }
         }
 
-        difficulty += f64::max(same_rhythm, same_pattern) * interval_penalty;
+        difficulty += f64::max(same_rhythm, same_pattern) * interval_penalty * gap_penalty;
 
         difficulty
     }
@@ -113,14 +115,14 @@ impl RhythmEvaluator {
                 let duration_diff = duration - expected_duration_from_prev;
 
                 if duration_diff > 0.0 {
-                    interval_diff *= logistic(duration_diff / hit_window, 0.7, 1.0, Some(1.0));
+                    interval_diff *= logistic(duration_diff / hit_window, 0.35, 2.0, Some(1.0));
                 }
             }
         }
 
         // Penalise patterns that can be hit within a single hit window.
         if let Some(duration) = duration {
-            interval_diff *= logistic(duration / hit_window, 0.6, 1.0, Some(1.0));
+            interval_diff *= logistic(duration / hit_window, 0.3, 2.0, Some(1.0));
         }
 
         f64::powf(interval_diff, 0.75)
@@ -190,6 +192,27 @@ impl RhythmEvaluator {
             });
 
         f64::min(long_interval_penalty, short_interval_penalty) * duration_penalty
+    }
+
+    fn long_gap_penalty(previous: Option<RefCount<SameRhythmHitObjectGrouping>>) -> f64 {
+        let Some(previous) = previous else {
+            return 1.0;
+        };
+
+        let previous = previous.get();
+        let Some(first_hit_object) = previous.first_hit_object() else {
+            return 1.0;
+        };
+
+        let gap_interval = first_hit_object.get().delta_time;
+        let rhythm_interval = previous.hit_object_interval.unwrap_or(gap_interval);
+        let rhythm_length = previous.hit_objects.len() as f64;
+
+        let gap_ratio = gap_interval / rhythm_interval.max(1.0);
+        let gap_factor = logistic(gap_ratio, 1.75, 20.0, None);
+        let length_factor = reverse_lerp(rhythm_length, 8.0, 2.0);
+
+        1.0 - 0.75 * gap_factor * length_factor
     }
 
     fn ratio_difficulty(mut ratio: f64, terms: Option<i32>) -> f64 {

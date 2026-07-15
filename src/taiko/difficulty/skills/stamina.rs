@@ -1,7 +1,10 @@
 use crate::{
     any::difficulty::{object::IDifficultyObject, skills::strain_decay},
     taiko::difficulty::object::{TaikoDifficultyObject, TaikoDifficultyObjects},
-    util::{difficulty::logistic_exp, sync::Weak},
+    util::{
+        difficulty::{logistic_exp, reverse_lerp},
+        sync::Weak,
+    },
 };
 
 define_skill! {
@@ -45,7 +48,7 @@ impl Stamina {
         objects: &TaikoDifficultyObjects,
     ) -> f64 {
         self.current_strain *= strain_decay(curr.delta_time, Self::STRAIN_DECAY_BASE);
-        self.current_strain +=
+        let mut stamina_difficulty =
             StaminaEvaluator::evaluate_diff_of(curr, objects) * Self::SKILL_MULTIPLIER;
 
         // * Safely prevents previous strains from shifting as new notes are added.
@@ -64,15 +67,24 @@ impl Stamina {
             })
             .unwrap_or(0) as isize;
 
+        let mono_length_bonus = if self.is_convert {
+            1.0
+        } else {
+            1.0 + 0.5 * reverse_lerp(index as f64, 5.0, 20.0)
+        };
+
+        // The mono-streak bonus applies only to the current object's colour-based
+        // stamina contribution, not to the accumulated strain.
+        if !self.single_color {
+            stamina_difficulty *= mono_length_bonus;
+        }
+
+        self.current_strain += stamina_difficulty;
+
         if self.single_color {
             logistic_exp(-(index - 10) as f64 / 2.0, Some(self.current_strain))
-        } else if self.is_convert {
-            self.current_strain
         } else {
-            #[allow(clippy::manual_clamp)]
-            let monolength_bonus = 1.0 + f64::min(f64::max((index - 5) as f64 / 50.0, 0.0), 0.30);
-
-            self.current_strain * monolength_bonus
+            self.current_strain
         }
     }
 }
